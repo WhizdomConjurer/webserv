@@ -1,330 +1,769 @@
+*This project has been created as part of the 42 curriculum by <login1>[, <login2>[, <login3>[...]]].*
+
 # webserv
 
-`webserv` ist ein 42-Projekt, in dem ein eigener HTTP-Server in C++ gebaut wird.
-Der Server soll mit einem echten Browser getestet werden koennen und grundlegende
-Webserver-Funktionen selbst umsetzen: Verbindungen annehmen, HTTP-Anfragen lesen,
-Antworten erzeugen, statische Dateien ausliefern, Fehlerseiten senden und CGI
-Programme starten.
+## Description
 
-Das Ziel ist nicht, einen fertigen Produktionsserver wie nginx nachzubauen,
-sondern die wichtigsten Mechanismen hinter Webservern zu verstehen.
+`webserv` is a 42 project whose goal is to write an HTTP server in C++98.
+The server must be usable with a real browser and must implement the core
+behavior expected from a small web server: accepting network connections,
+parsing HTTP requests, selecting the correct configuration, serving static
+files, handling uploads, executing CGI programs, returning accurate status
+codes, and staying available under stress.
 
-## Was ist HTTP?
+This project is not about using an existing web server. The point is to
+understand what a web server does internally and to implement the required
+parts ourselves.
 
-HTTP steht fuer **Hypertext Transfer Protocol**. Es ist das Protokoll, mit dem
-Browser und Webserver im Web miteinander sprechen.
+## What Is HTTP?
 
-Ein typischer Ablauf sieht so aus:
+HTTP means **Hypertext Transfer Protocol**. It is the application protocol used
+by browsers, crawlers, command-line tools like `curl`, and web servers to
+exchange data on the web.
 
-1. Ein Browser verbindet sich mit einem Server.
-2. Der Browser sendet eine HTTP-Anfrage, zum Beispiel `GET /index.html HTTP/1.1`.
-3. Der Server liest diese Anfrage.
-4. Der Server entscheidet, was zur Anfrage passt.
-5. Der Server sendet eine HTTP-Antwort zurueck.
+A normal HTTP exchange looks like this:
 
-Eine HTTP-Anfrage besteht meistens aus:
+1. A client opens a TCP connection to the server.
+2. The client sends an HTTP request.
+3. The server reads and parses the request.
+4. The server decides which resource or behavior matches the request.
+5. The server sends an HTTP response.
+6. The client reads the response and displays or processes it.
 
-- einer Request-Line, zum Beispiel `GET / HTTP/1.1`
-- Headern, zum Beispiel `Host`, `Content-Length` oder `Content-Type`
-- optional einem Body, zum Beispiel bei `POST`
+An HTTP request usually contains:
 
-Eine HTTP-Antwort besteht meistens aus:
+- a request line, for example `GET /index.html HTTP/1.1`
+- headers, for example `Host`, `Content-Length`, or `Content-Type`
+- an optional body, for example form data in a `POST` request
 
-- einer Status-Line, zum Beispiel `HTTP/1.1 200 OK`
-- Headern, zum Beispiel `Content-Type` oder `Content-Length`
-- optional einem Body, zum Beispiel HTML, JSON, ein Bild oder eine Fehlerseite
+An HTTP response usually contains:
 
-HTTP ist wichtig, weil es festlegt, wie Client und Server Daten austauschen. Ohne
-dieses gemeinsame Format wuesste der Browser nicht, wie er eine Antwort verstehen
-soll, und der Server wuesste nicht, was der Browser eigentlich anfragt.
+- a status line, for example `HTTP/1.1 200 OK`
+- headers, for example `Content-Type` or `Content-Length`
+- an optional body, for example HTML, JSON, an image, or an error page
 
-## HTTP-Methoden
+HTTP is important because it gives both sides a shared format. The client knows
+how to ask for something, and the server knows how to answer in a way that the
+client can understand.
 
-HTTP-Methoden beschreiben, was der Client tun moechte.
+## What Is A Web Server?
 
-- `GET`: Eine Ressource abrufen, zum Beispiel eine HTML-Datei oder ein Bild.
-- `POST`: Daten an den Server schicken, zum Beispiel ein Formular oder Upload.
-- `DELETE`: Eine Ressource loeschen, wenn der Server das erlaubt.
+A web server is a program that waits for network connections and answers HTTP
+requests.
 
-Im Projekt muss der Server diese Methoden korrekt erkennen und je nach
-Konfiguration erlauben oder ablehnen.
+In this project, `webserv` must be able to:
 
-## HTTP-Statuscodes
+- create and configure listening sockets
+- listen on one or more interface:port pairs
+- accept client connections
+- keep sockets non-blocking
+- monitor all client and server I/O through one polling mechanism
+- read incoming HTTP requests
+- parse request lines, headers, and bodies
+- choose the correct server and route configuration
+- serve static files
+- generate directory listings when enabled
+- use default index files for directories
+- receive client uploads
+- delete resources when allowed
+- send redirects
+- execute CGI programs
+- generate default error pages
+- return accurate HTTP status codes
+- stay available during stress tests
 
-Statuscodes sagen dem Client, ob eine Anfrage erfolgreich war oder warum sie
-fehlgeschlagen ist.
+## What Is CGI?
 
-Beispiele:
+CGI means **Common Gateway Interface**. It is a standard way for a web server to
+communicate with an external program or script.
 
-- `200 OK`: Die Anfrage war erfolgreich.
-- `201 Created`: Eine Ressource wurde erstellt.
-- `301 Moved Permanently`: Die Ressource wurde dauerhaft verschoben.
-- `400 Bad Request`: Die Anfrage ist fehlerhaft.
-- `403 Forbidden`: Der Zugriff ist verboten.
-- `404 Not Found`: Die Ressource wurde nicht gefunden.
-- `405 Method Not Allowed`: Die Methode ist fuer diese Route nicht erlaubt.
-- `413 Payload Too Large`: Der Request-Body ist groesser als erlaubt.
-- `500 Internal Server Error`: Auf dem Server ist ein Fehler passiert.
-
-Diese Codes sind wichtig, weil Browser, Tools wie `curl` und andere Programme
-dadurch maschinenlesbar verstehen, was passiert ist.
-
-## Was macht ein Webserver?
-
-Ein Webserver ist ein Programm, das auf Netzwerkverbindungen wartet und
-HTTP-Anfragen beantwortet.
-
-In `webserv` muss der Server unter anderem:
-
-- einen Socket erstellen
-- an eine IP-Adresse und einen Port binden
-- auf eingehende Verbindungen warten
-- neue Clients akzeptieren
-- Daten von Clients lesen
-- HTTP-Anfragen parsen
-- passende Server- und Location-Konfigurationen auswaehlen
-- statische Dateien ausliefern
-- Directory Listing erzeugen, falls aktiviert
-- Uploads verarbeiten, falls erlaubt
-- Weiterleitungen senden
-- Fehlerseiten ausliefern
-- CGI-Skripte ausfuehren
-- mehrere Clients gleichzeitig verwalten
-
-Dabei ist wichtig, dass der Server nicht fuer jeden Client blockiert. Deshalb
-werden Mechanismen wie `poll()` verwendet, um viele File Descriptors gleichzeitig
-zu beobachten.
-
-## Was ist CGI?
-
-CGI steht fuer **Common Gateway Interface**. Es ist eine Schnittstelle zwischen
-einem Webserver und einem externen Programm oder Skript.
-
-Ohne CGI liefert ein Webserver meistens nur vorhandene Dateien aus, zum Beispiel:
+Without CGI, a server mostly returns existing files:
 
 - `index.html`
 - `style.css`
 - `image.png`
 
-Mit CGI kann der Server dynamische Inhalte erzeugen lassen. Das bedeutet: Der
-Server startet ein Programm, gibt ihm Informationen ueber die Anfrage und schickt
-die Ausgabe dieses Programms als HTTP-Antwort an den Client zurueck.
+With CGI, the server can create dynamic responses. The server starts a program,
+passes request information to it through environment variables and standard
+input, then sends the program output back to the client as an HTTP response.
 
-Beispiel:
+Example CGI flow:
 
-1. Der Browser ruft `/cgi-bin/script.py` auf.
-2. Der Server erkennt, dass diese Datei als CGI ausgefuehrt werden soll.
-3. Der Server setzt CGI-Umgebungsvariablen wie `REQUEST_METHOD`, `PATH_INFO` oder
-   `CONTENT_LENGTH`.
-4. Bei `POST` gibt der Server den Request-Body an das CGI-Programm weiter.
-5. Das CGI-Programm schreibt seine Antwort auf `stdout`.
-6. Der Server liest diese Ausgabe und sendet sie an den Browser.
+1. The browser requests `/cgi-bin/script.py`.
+2. The server detects that this file extension is configured as CGI.
+3. The server prepares CGI environment variables.
+4. For requests with a body, the server sends the body to the CGI process.
+5. The CGI program writes its response to `stdout`.
+6. The server reads this output.
+7. The server forwards the CGI response to the client.
 
-CGI ist also dafuer da, dynamische Antworten zu erzeugen, zum Beispiel:
+CGI is used for dynamic content such as:
 
-- Formularverarbeitung
-- Login- oder Session-Logik
-- kleine API-Antworten
-- generierte HTML-Seiten
-- Verarbeitung von Uploads
+- form handling
+- generated HTML pages
+- small API responses
+- upload processing
+- scripts written in Python, PHP, or another supported CGI language
 
-## Wichtige CGI-Variablen
+Important CGI details from the subject:
 
-CGI-Programme bekommen Informationen ueber die Anfrage ueber
-Umgebungsvariablen.
+- CGI execution must be based on file extension, for example `.php` or `.py`.
+- The full request and its arguments must be available to the CGI program.
+- CGI environment variables must be set correctly.
+- For chunked requests, the server must unchunk the body before giving it to CGI.
+- CGI expects EOF as the end of the body.
+- If CGI output has no `Content-Length`, EOF marks the end of the CGI response.
+- CGI must run in the correct directory so relative paths work.
+- The project must support at least one CGI type.
 
-Typische Variablen sind:
+## Instructions
 
-- `REQUEST_METHOD`: Die HTTP-Methode, zum Beispiel `GET` oder `POST`.
-- `SCRIPT_NAME`: Der Pfad zum ausgefuehrten Skript.
-- `PATH_INFO`: Zusaetzliche Pfadinformation nach dem Skriptnamen.
-- `QUERY_STRING`: Der Teil der URL nach `?`.
-- `CONTENT_TYPE`: Der Typ des Request-Bodys.
-- `CONTENT_LENGTH`: Die Groesse des Request-Bodys.
-- `SERVER_PROTOCOL`: Die HTTP-Version, zum Beispiel `HTTP/1.1`.
-- `HTTP_COOKIE`: Cookies, die der Client geschickt hat.
+### Build
 
-Diese Variablen sind der Weg, wie das CGI-Programm versteht, welche Anfrage
-gestellt wurde.
+```sh
+make
+```
 
-## Warum braucht `webserv` Sockets?
+The Makefile must provide at least these rules:
 
-Ein Socket ist ein Endpunkt fuer Netzwerkkommunikation. Der Server nutzt Sockets,
-um TCP-Verbindungen von Browsern oder Tools wie `curl` anzunehmen.
+```sh
+make
+make all
+make clean
+make fclean
+make re
+```
 
-Wichtige Funktionen:
+The project must compile with:
 
-- `socket()`: Erstellt einen neuen Socket.
-- `bind()`: Bindet den Socket an eine Adresse und einen Port.
-- `listen()`: Versetzt den Socket in den Zustand, in dem er Verbindungen annimmt.
-- `accept()`: Nimmt eine neue Client-Verbindung an.
-- `recv()` / `read()`: Liest Daten vom Client.
-- `send()` / `write()`: Schreibt Daten zurueck an den Client.
-- `close()`: Schliesst den Socket oder File Descriptor.
+```sh
+c++ -Wall -Wextra -Werror
+```
 
-## Warum wird `poll()` benutzt?
+It must also remain compatible with C++98:
 
-Ein Webserver muss oft mehrere Clients gleichzeitig bedienen. Wenn der Server bei
-einem Client blockiert, koennen andere Clients nicht mehr bearbeitet werden.
+```sh
+c++ -Wall -Wextra -Werror -std=c++98
+```
 
-`poll()` hilft dabei, viele File Descriptors gleichzeitig zu ueberwachen. Der
-Server kann dadurch erkennen:
+### Run
 
-- welcher Socket eine neue Verbindung hat
-- welcher Client neue Daten geschickt hat
-- welcher Client bereit ist, Daten zu empfangen
-- ob ein Fehler oder Disconnect passiert ist
+The executable must be named:
 
-Dadurch kann ein einzelner Prozess mehrere Clients verwalten, ohne fuer jeden
-Client einen eigenen blockierenden Ablauf zu starten.
+```sh
+webserv
+```
 
-## Konfiguration
+It must run like this:
 
-Ein wichtiger Teil von `webserv` ist die Konfigurationsdatei. Sie beschreibt, wie
-der Server sich verhalten soll.
+```sh
+./webserv [configuration file]
+```
 
-Typische Einstellungen sind:
+If no configuration file is provided, the program must use a default path.
 
-- Port und Host, auf denen der Server lauscht
-- Servernamen
-- Root-Verzeichnisse
-- erlaubte HTTP-Methoden
-- maximale Body-Groesse
-- eigene Fehlerseiten
-- Weiterleitungen
-- CGI-Endungen und CGI-Interpreter
-- Upload-Verzeichnisse
-- Autoindex fuer Directory Listing
-
-Die Konfiguration ist wichtig, weil ein Webserver je nach Route unterschiedlich
-reagieren kann. Zum Beispiel kann `/uploads` Uploads erlauben, waehrend `/static`
-nur Dateien ausliefert.
-
-## Nuetzliche Tests
-
-Der Server kann mit einem Browser getestet werden. Fuer gezieltere Tests ist
-`curl` sehr hilfreich:
+### Quick Manual Tests
 
 ```sh
 curl -v http://localhost:8080/
-curl -X POST http://localhost:8080/upload -d "hello"
-curl -H "Host: example.com" http://localhost:8080/
+curl -v -X POST http://localhost:8080/upload -d "hello"
+curl -v -X DELETE http://localhost:8080/file.txt
+curl -v -H "Host: example.com" http://localhost:8080/
 curl --resolve example.com:8080:127.0.0.1 http://example.com:8080/
 ```
 
-Mit `curl -v` sieht man Header, Statuscode und Verbindungsdetails sehr gut.
+Browser tests are also required because the subject explicitly expects the
+server to be compatible with a standard web browser of your choice.
 
-## Tutorials
+## Subject Checklist
 
-- Building a simple web server in C++
-- C++ Web Programming: CGI program
-- HTTP
-- Build a simple HTTP server from scratch
-- Manage a socket flow of events using `poll()`
-- C++ programming applied to network
-- Network programming
+This section is a detailed checklist based on the `webserv` subject. It is meant
+to help team members track what must be implemented, tested, and demonstrated
+during evaluation.
 
-## HTTP documentation
+### 1. Repository And Submitted Files
 
-- RFC 2616: HTTP 1.1 protocol
+- [ ] The repository contains all required project files.
+- [ ] Submitted files include a `Makefile`.
+- [ ] Submitted files include C++ source files: `*.cpp`.
+- [ ] Submitted files include headers where needed: `*.h` and/or `*.hpp`.
+- [ ] Submitted files include template files where needed: `*.tpp` and/or `*.ipp`.
+- [ ] Submitted files include configuration files.
+- [ ] The executable produced by the Makefile is named `webserv`.
+- [ ] Only repository content is required for evaluation.
+- [ ] File names are double-checked before submission.
+
+### 2. General Rules
+
+- [ ] The program must not crash under any circumstances.
+- [ ] The program must not terminate unexpectedly.
+- [ ] The program must handle errors cleanly, including severe cases such as
+      allocation failure as well as reasonably possible.
+- [ ] The Makefile must not perform unnecessary relinking.
+- [ ] The Makefile must contain the rules `$(NAME)`, `all`, `clean`, `fclean`,
+      and `re`.
+- [ ] The project must compile with `c++`.
+- [ ] The project must compile with `-Wall -Wextra -Werror`.
+- [ ] The project must comply with the C++98 standard.
+- [ ] The project should still compile when `-std=c++98` is added.
+- [ ] C++ features should be preferred over C-style alternatives where possible.
+- [ ] Example: prefer `<cstring>` over `<string.h>`.
+- [ ] External libraries are forbidden.
+- [ ] Boost is forbidden.
+- [ ] Libft is not authorized and not needed.
+
+### 3. Program Interface
+
+- [ ] Program name is exactly `webserv`.
+- [ ] The program can be started with a configuration file argument:
+      `./webserv path/to/config`.
+- [ ] The program can also run using a default configuration path when no
+      argument is provided.
+- [ ] Invalid arguments are handled with a clear error message.
+- [ ] Missing or invalid configuration files are handled without crashing.
+- [ ] The server starts listening after configuration parsing succeeds.
+
+### 4. Authorized Functions
+
+Only the subject-authorized external functions should be used.
+
+- [ ] `execve`
+- [ ] `pipe`
+- [ ] `strerror`
+- [ ] `gai_strerror`
+- [ ] `errno`
+- [ ] `dup`
+- [ ] `dup2`
+- [ ] `fork`
+- [ ] `socketpair`
+- [ ] `htons`
+- [ ] `htonl`
+- [ ] `ntohs`
+- [ ] `ntohl`
+- [ ] `select`
+- [ ] `poll`
+- [ ] `epoll_create`
+- [ ] `epoll_ctl`
+- [ ] `epoll_wait`
+- [ ] `kqueue`
+- [ ] `kevent`
+- [ ] `socket`
+- [ ] `accept`
+- [ ] `listen`
+- [ ] `send`
+- [ ] `recv`
+- [ ] `chdir`
+- [ ] `bind`
+- [ ] `connect`
+- [ ] `getaddrinfo`
+- [ ] `freeaddrinfo`
+- [ ] `setsockopt`
+- [ ] `getsockname`
+- [ ] `getprotobyname`
+- [ ] `fcntl`
+- [ ] `close`
+- [ ] `read`
+- [ ] `write`
+- [ ] `waitpid`
+- [ ] `kill`
+- [ ] `signal`
+- [ ] `access`
+- [ ] `stat`
+- [ ] `open`
+- [ ] `opendir`
+- [ ] `readdir`
+- [ ] `closedir`
+
+Implementation note:
+
+- [ ] `fork()` must be used only for CGI.
+- [ ] It is forbidden to `execve()` another web server.
+
+### 5. Event Loop And Non-Blocking I/O
+
+The non-blocking I/O model is one of the most important grading points.
+
+- [ ] The server must remain non-blocking at all times.
+- [ ] The server must properly handle client disconnections.
+- [ ] The server must use one `poll()` or equivalent mechanism for all I/O
+      between clients and the server.
+- [ ] The listening sockets must also be monitored by this same polling
+      mechanism.
+- [ ] The chosen mechanism may be `poll()`, `select()`, `kqueue()`, or `epoll()`.
+- [ ] Read readiness and write readiness must both be monitored.
+- [ ] The server must never call `read()` or `recv()` on sockets, pipes, or FIFOs
+      unless readiness was reported by the polling mechanism.
+- [ ] The server must never call `write()` or `send()` on sockets, pipes, or
+      FIFOs unless readiness was reported by the polling mechanism.
+- [ ] Regular disk files are exempt from polling readiness requirements.
+- [ ] I/O that can wait for data, such as sockets and pipes, must be non-blocking.
+- [ ] A request must never hang forever.
+- [ ] Timeouts or cleanup logic must remove stuck requests or dead clients.
+- [ ] After `read()` or `write()`, the server must not check `errno` to decide
+      normal server behavior.
+- [ ] All file descriptors that can block should be set to non-blocking mode.
+- [ ] Poll events must be updated depending on whether a client needs reading,
+      writing, or both.
+
+### 6. macOS-Specific Rules
+
+Because macOS handles `write()` differently from other Unix systems, the subject
+allows `fcntl()` with strict limitations.
+
+- [ ] On macOS, file descriptors must be put in non-blocking mode.
+- [ ] `fcntl()` may be used only with the allowed flags.
+- [ ] Allowed `fcntl()` flags are `F_SETFL`, `O_NONBLOCK`, and `FD_CLOEXEC`.
+- [ ] Any other `fcntl()` flag is forbidden by the subject.
+
+### 7. HTTP Request Parsing
+
+- [ ] Parse the request line.
+- [ ] Extract the HTTP method.
+- [ ] Extract the request target URI.
+- [ ] Extract the HTTP version.
+- [ ] Parse request headers.
+- [ ] Support request bodies.
+- [ ] Correctly handle `Content-Length`.
+- [ ] Correctly handle body size limits.
+- [ ] Correctly handle malformed requests.
+- [ ] Correctly handle unsupported methods.
+- [ ] Correctly handle unknown routes.
+- [ ] Correctly handle URL paths and route matching.
+- [ ] Decode or normalize paths as needed to safely map URLs to files.
+- [ ] Prevent path traversal such as `../` escaping the configured root.
+- [ ] Requests must not hang indefinitely, even if incomplete or malformed.
+
+### 8. HTTP Response Generation
+
+- [ ] Generate valid HTTP responses.
+- [ ] Return accurate HTTP status codes.
+- [ ] Include required headers.
+- [ ] Include correct `Content-Length` when known.
+- [ ] Include suitable `Content-Type` where possible.
+- [ ] Send response bodies for successful file responses.
+- [ ] Send response bodies for error pages.
+- [ ] Provide default error pages when no custom error page is configured.
+- [ ] Close or keep connections consistently according to implemented behavior.
+- [ ] Compare behavior with NGINX when a specific HTTP behavior is unclear.
+
+### 9. Required HTTP Methods
+
+The subject requires at least these methods:
+
+- [ ] `GET`
+- [ ] `POST`
+- [ ] `DELETE`
+
+For each configured route:
+
+- [ ] Check whether the method is allowed.
+- [ ] Return `405 Method Not Allowed` or another accurate status when the method
+      is not accepted.
+- [ ] Ensure method restrictions are route-specific.
+
+### 10. Static Website Serving
+
+- [ ] The server must be able to serve a fully static website.
+- [ ] Static HTML files can be served.
+- [ ] CSS files can be served.
+- [ ] JavaScript files can be served.
+- [ ] Images and other assets can be served.
+- [ ] Missing files return an accurate error status.
+- [ ] Forbidden files or directories return an accurate error status.
+- [ ] Directory requests use the configured default file when available.
+- [ ] Directory listing is generated only when enabled.
+- [ ] Directory listing is disabled when configured off.
+
+### 11. Uploads
+
+- [ ] Clients must be able to upload files.
+- [ ] Uploads must only be allowed where the configuration permits them.
+- [ ] The upload storage location must come from the configuration.
+- [ ] Uploaded file data must be written safely.
+- [ ] Body size limits must be enforced.
+- [ ] Oversized upload requests must receive an accurate status code.
+- [ ] Upload errors must not crash the server.
+- [ ] Upload behavior must be demonstrable during evaluation.
+
+### 12. DELETE Behavior
+
+- [ ] `DELETE` requests must be supported.
+- [ ] Deleting must obey route method restrictions.
+- [ ] Deleting must not escape the configured root.
+- [ ] Successful deletion returns an accurate success status.
+- [ ] Missing resources return an accurate error status.
+- [ ] Forbidden deletion returns an accurate error status.
+- [ ] Delete errors must not crash the server.
+
+### 13. Multiple Ports And Multiple Websites
+
+- [ ] The server must be able to listen on multiple ports.
+- [ ] Different ports can deliver different content.
+- [ ] The configuration can define all interface:port pairs.
+- [ ] Multiple listening sockets are managed by the same event loop.
+- [ ] The listening sockets are monitored by the same `poll()` or equivalent call.
+- [ ] The subject says virtual hosts are out of scope.
+- [ ] Virtual hosts may be implemented optionally, but they are not required.
+
+### 14. Configuration File
+
+The configuration may be inspired by the `server` section of NGINX.
+
+Required configuration capabilities:
+
+- [ ] Define every interface:port pair on which the server listens.
+- [ ] Define multiple websites served by the program.
+- [ ] Configure default error pages.
+- [ ] Configure the maximum allowed client request body size.
+- [ ] Configure route-specific rules.
+- [ ] Configure accepted HTTP methods per route.
+- [ ] Configure HTTP redirection.
+- [ ] Configure the root directory for requested files.
+- [ ] Configure directory listing on or off.
+- [ ] Configure the default file served for directory requests.
+- [ ] Configure whether uploads are allowed.
+- [ ] Configure the upload storage location.
+- [ ] Configure CGI execution by file extension.
+- [ ] Provide enough configuration files to demonstrate all required features.
+- [ ] Handle syntax errors without crashing.
+- [ ] Handle missing required values without crashing.
+- [ ] Handle duplicate or conflicting settings in a defined way.
+
+Route example from the subject:
+
+- [ ] If URL `/kapouet` is rooted to `/tmp/www`, then request
+      `/kapouet/pouic/toto/pouet` must map to
+      `/tmp/www/pouic/toto/pouet`.
+
+Optional configuration capability:
+
+- [ ] A server name may be added if the team chooses to implement virtual hosts.
+
+### 15. Redirections
+
+- [ ] A route can be configured to redirect.
+- [ ] Redirection returns an accurate 3xx status code.
+- [ ] Redirection includes the correct `Location` header.
+- [ ] Redirection does not try to serve a file from the route root.
+- [ ] Redirection behavior is demonstrable with `curl -v`.
+
+### 16. Directory Listing And Index Files
+
+- [ ] Directory listing can be enabled per route.
+- [ ] Directory listing can be disabled per route.
+- [ ] If a directory is requested and an index/default file exists, serve it.
+- [ ] If no index exists and directory listing is enabled, generate a listing.
+- [ ] If no index exists and directory listing is disabled, return an accurate
+      error status.
+- [ ] Generated listings must not expose paths outside the configured root.
+
+### 17. CGI Implementation
+
+- [ ] CGI execution is selected by file extension.
+- [ ] At least one CGI type is supported, for example Python or PHP-CGI.
+- [ ] CGI is executed only for routes/files configured for CGI.
+- [ ] `fork()` is used only for CGI.
+- [ ] `execve()` starts the configured CGI interpreter or executable.
+- [ ] Pipes or another authorized mechanism connect server and CGI input/output.
+- [ ] The request body is passed to CGI when required.
+- [ ] CGI output is read by the server.
+- [ ] The CGI response is forwarded to the client.
+- [ ] CGI receives the full request information and arguments.
+- [ ] Required CGI environment variables are set.
+- [ ] The CGI process runs in the correct directory.
+- [ ] Relative file access from CGI works as expected.
+- [ ] Chunked request bodies are unchunked before being passed to CGI.
+- [ ] EOF marks the end of the CGI request body.
+- [ ] If CGI output has no `Content-Length`, EOF marks the end of CGI output.
+- [ ] CGI timeouts or process failures are handled.
+- [ ] Dead CGI processes are cleaned up with `waitpid()`.
+- [ ] CGI must not block the whole server.
+- [ ] CGI errors return accurate HTTP errors.
+
+Useful CGI environment variables to consider:
+
+- [ ] `REQUEST_METHOD`
+- [ ] `SCRIPT_NAME`
+- [ ] `PATH_INFO`
+- [ ] `QUERY_STRING`
+- [ ] `CONTENT_TYPE`
+- [ ] `CONTENT_LENGTH`
+- [ ] `SERVER_PROTOCOL`
+- [ ] `SERVER_NAME`
+- [ ] `SERVER_PORT`
+- [ ] `REMOTE_ADDR`
+- [ ] HTTP headers converted to `HTTP_*` variables where needed
+
+### 18. Error Handling
+
+- [ ] Default error pages exist.
+- [ ] Configured custom error pages override defaults.
+- [ ] Bad requests return an accurate error status.
+- [ ] Unknown routes return `404 Not Found`.
+- [ ] Forbidden resources return `403 Forbidden`.
+- [ ] Method violations return `405 Method Not Allowed`.
+- [ ] Oversized bodies return an accurate status such as `413 Payload Too Large`.
+- [ ] Internal failures return `500 Internal Server Error`.
+- [ ] CGI failures return an accurate 5xx status.
+- [ ] The server remains alive after errors.
+
+### 19. Browser Compatibility
+
+- [ ] The server works with at least one standard web browser.
+- [ ] Static pages render correctly in the browser.
+- [ ] Assets referenced by HTML load correctly.
+- [ ] Forms can submit data to the server.
+- [ ] Uploads can be tested from the browser.
+- [ ] CGI output can be opened from the browser.
+- [ ] Browser tests do not leave the server hanging.
+
+### 20. NGINX And RFC Comparison
+
+- [ ] The team has read the relevant HTTP RFC material before implementation.
+- [ ] HTTP/1.0 may be used as a reference point, but it is not strictly enforced.
+- [ ] NGINX can be used to compare headers and response behavior.
+- [ ] Differences between HTTP versions are considered when comparing with NGINX.
+- [ ] Ambiguous behavior is documented or decided consistently.
+
+### 21. Stress Testing And Resilience
+
+- [ ] The server is stress-tested.
+- [ ] The server remains available during stress tests.
+- [ ] Many simultaneous clients do not crash the server.
+- [ ] Repeated connections do not leak file descriptors.
+- [ ] Client disconnections are handled properly.
+- [ ] Slow or incomplete clients do not hang forever.
+- [ ] Large but valid requests are handled according to configuration.
+- [ ] Invalid requests do not crash the server.
+- [ ] CGI stress cases do not leave zombie processes.
+- [ ] The subject recommends testing with more than one program.
+- [ ] Tests may be written in Python, Go, C, C++, or another suitable language.
+- [ ] The provided tester may be used, but it is not mandatory if browser and team
+      tests cover the behavior.
+
+### 22. Demonstration Files For Evaluation
+
+The subject requires files that demonstrate every feature.
+
+- [ ] Provide configuration files for evaluation.
+- [ ] Provide default/static website files.
+- [ ] Provide files that demonstrate custom error pages.
+- [ ] Provide files that demonstrate directory listing.
+- [ ] Provide files that demonstrate default index behavior.
+- [ ] Provide files or scripts that demonstrate uploads.
+- [ ] Provide files or scripts that demonstrate `GET`.
+- [ ] Provide files or scripts that demonstrate `POST`.
+- [ ] Provide files or scripts that demonstrate `DELETE`.
+- [ ] Provide files or scripts that demonstrate CGI.
+- [ ] Provide files or scripts that demonstrate redirects.
+- [ ] Provide files or scripts that demonstrate multiple ports.
+- [ ] Make sure demonstration paths match the provided configuration files.
+
+### 23. README Requirements
+
+The subject requires a README at the root of the Git repository.
+
+- [ ] The README file is at the repository root.
+- [ ] The README is written in English.
+- [ ] The first line is italicized.
+- [ ] The first line reads:
+      `This project has been created as part of the 42 curriculum by <login1>[, <login2>[, <login3>[...]]].`
+- [ ] The README contains a `Description` section.
+- [ ] The `Description` section clearly presents the project.
+- [ ] The `Description` section explains the goal and gives a short overview.
+- [ ] The README contains an `Instructions` section.
+- [ ] The `Instructions` section explains compilation.
+- [ ] The `Instructions` section explains execution.
+- [ ] The README contains a `Resources` section.
+- [ ] The `Resources` section lists classic references.
+- [ ] The `Resources` section describes how AI was used.
+- [ ] Additional useful sections may be included.
+
+### 24. AI Usage Responsibility
+
+The subject includes AI usage guidance.
+
+- [ ] AI-generated content must be understood by the team.
+- [ ] The team must be able to take responsibility for AI-assisted content.
+- [ ] AI output should be reviewed, questioned, and tested.
+- [ ] Peers should review important AI-assisted decisions.
+- [ ] No team member should submit code they cannot explain.
+- [ ] Any AI usage should be described in the README resources section.
+
+### 25. Bonus Features
+
+Bonus is evaluated only if the mandatory part is fully complete.
+
+- [ ] Support cookies.
+- [ ] Support session management.
+- [ ] Provide simple examples for cookies and sessions.
+- [ ] Handle multiple CGI types.
+- [ ] Do not rely on bonus features to compensate for missing mandatory features.
+
+### 26. Peer Evaluation Preparation
+
+- [ ] Be ready to explain the event loop.
+- [ ] Be ready to explain why the server is non-blocking.
+- [ ] Be ready to explain how `poll()` or equivalent is used.
+- [ ] Be ready to explain request parsing.
+- [ ] Be ready to explain response generation.
+- [ ] Be ready to explain route matching.
+- [ ] Be ready to explain config parsing.
+- [ ] Be ready to explain CGI input, output, environment variables, and process
+      cleanup.
+- [ ] Be ready to explain upload handling.
+- [ ] Be ready to explain DELETE behavior.
+- [ ] Be ready to explain error handling.
+- [ ] Be ready to make a small requested modification during evaluation.
+
+## Suggested Team Task Breakdown
+
+This project is easier if the work is split into clear modules. The exact
+structure can be different, but every responsibility below must be covered.
+
+### Configuration
+
+- [ ] Define the configuration grammar.
+- [ ] Parse server blocks or equivalent structures.
+- [ ] Parse listen/interface:port values.
+- [ ] Parse error pages.
+- [ ] Parse client body size limit.
+- [ ] Parse route/location blocks.
+- [ ] Parse allowed methods.
+- [ ] Parse route roots.
+- [ ] Parse index files.
+- [ ] Parse autoindex setting.
+- [ ] Parse redirects.
+- [ ] Parse upload settings.
+- [ ] Parse CGI extension and interpreter settings.
+- [ ] Validate the final configuration.
+- [ ] Produce helpful error messages for invalid configuration.
+
+### Networking
+
+- [ ] Create listening sockets.
+- [ ] Apply `setsockopt()` where needed, for example address reuse.
+- [ ] Bind sockets to configured addresses and ports.
+- [ ] Call `listen()` on each listening socket.
+- [ ] Put sockets in non-blocking mode.
+- [ ] Add listening sockets to the polling structure.
+- [ ] Accept new clients only when the listening socket is ready.
+- [ ] Track each client state.
+- [ ] Close clients cleanly.
+
+### Event Loop
+
+- [ ] Maintain one central poll/select/kqueue/epoll loop.
+- [ ] Register all relevant sockets.
+- [ ] Register CGI pipes if they can block.
+- [ ] Switch clients between read and write interest.
+- [ ] Avoid blocking calls on sockets and pipes.
+- [ ] Remove closed descriptors from the polling set.
+- [ ] Handle timeouts.
+- [ ] Keep the server alive after recoverable errors.
+
+### HTTP Parser
+
+- [ ] Accumulate incoming bytes per client.
+- [ ] Detect complete headers.
+- [ ] Parse request line.
+- [ ] Parse headers case-insensitively where appropriate.
+- [ ] Detect body length.
+- [ ] Read complete body before handling routes that need it.
+- [ ] Support chunked request handling when needed for CGI.
+- [ ] Reject malformed requests.
+- [ ] Protect against excessively large headers or bodies.
+
+### Routing
+
+- [ ] Match request host/port to the correct server configuration.
+- [ ] Match request path to the correct route/location.
+- [ ] Apply longest-prefix route behavior if that is the chosen design.
+- [ ] Resolve filesystem paths safely.
+- [ ] Apply method restrictions.
+- [ ] Apply redirection before file serving.
+- [ ] Decide between static file, directory, upload, delete, and CGI behavior.
+
+### Static Files And Directories
+
+- [ ] Open and read regular files.
+- [ ] Determine file existence and permissions with `stat()`/`access()`.
+- [ ] Return correct status for missing or forbidden resources.
+- [ ] Serve directory index files.
+- [ ] Generate autoindex output if enabled.
+- [ ] Set content type where possible.
+
+### Uploads And Body Handling
+
+- [ ] Enforce configured body size limit.
+- [ ] Store uploaded data in the configured directory.
+- [ ] Prevent unsafe paths or overwrites unless explicitly intended.
+- [ ] Return accurate success or error status.
+- [ ] Test uploads with `curl` and a browser form.
+
+### CGI
+
+- [ ] Detect CGI by extension.
+- [ ] Build the CGI environment.
+- [ ] Create pipes for stdin/stdout.
+- [ ] Fork the CGI process.
+- [ ] Redirect descriptors with `dup2()`.
+- [ ] Execute the CGI program with `execve()`.
+- [ ] Feed request body to CGI.
+- [ ] Read CGI output without blocking the server.
+- [ ] Parse or forward CGI headers correctly.
+- [ ] Handle missing CGI output length using EOF.
+- [ ] Kill or timeout stuck CGI processes if needed.
+- [ ] Reap child processes with `waitpid()`.
+
+### Testing
+
+- [ ] Test compilation with required flags.
+- [ ] Test startup with default config.
+- [ ] Test startup with explicit config.
+- [ ] Test invalid config.
+- [ ] Test `GET` static file.
+- [ ] Test `GET` directory with index.
+- [ ] Test `GET` directory with autoindex enabled.
+- [ ] Test `GET` directory with autoindex disabled.
+- [ ] Test `POST` upload.
+- [ ] Test `DELETE` existing resource.
+- [ ] Test `DELETE` missing resource.
+- [ ] Test disallowed methods.
+- [ ] Test oversized body.
+- [ ] Test custom error pages.
+- [ ] Test default error pages.
+- [ ] Test redirect.
+- [ ] Test CGI `GET`.
+- [ ] Test CGI `POST`.
+- [ ] Test CGI with query string.
+- [ ] Test multiple ports.
+- [ ] Test browser compatibility.
+- [ ] Test many simultaneous clients.
+- [ ] Test client disconnects.
+- [ ] Test slow or incomplete requests.
+- [ ] Test that the server remains running after each error case.
+
+## Resources
+
+Classic references for this project:
+
+- RFC 2616: HTTP/1.1
 - RFC 7230: HTTP/1.1 Message Syntax and Routing
-- List of HTTP status codes
-- Content-Type
-- Content-Type Stack List
-- Content-Type Full List
-- HTTP messages
-- Redirections
-
-## Useful RFCs
-
-- RFC editor: official source for RFCs on the World Wide Web
-- RFC 2396: Uniform Resource Identifiers (URI): Generic Syntax
+- RFC 2396: URI Generic Syntax
 - RFC 3875: CGI
+- HTTP status code references
+- Content-Type and MIME type references
+- NGINX documentation about server and location selection
+- Documentation for `socket()`, `bind()`, `listen()`, `accept()`, `poll()`,
+  `select()`, `kqueue()`, `epoll()`, `fork()`, `execve()`, `pipe()`, `dup2()`,
+  `fcntl()`, `read()`, `write()`, `send()`, and `recv()`
 
-## Useful C functions
+AI usage for this README:
 
-- `socket()`: Creates an endpoint for communication and returns a file descriptor.
-- `bind()`: Assigns an address and port to a socket.
-- `listen()`: Marks a socket as passive, so it can accept incoming connections.
-- `accept()`: Accepts a new connection on a listening socket.
-- `poll()`: Waits until one or more file descriptors are ready for I/O.
-- `fork()`: Creates a child process, useful for CGI execution.
-- `execve()`: Replaces the current process image with another program.
-- `pipe()`: Creates a communication channel between processes.
-- `dup2()`: Redirects file descriptors, useful for CGI stdin/stdout handling.
-
-## CGI documentation
-
-- RFC 3875: CGI
-- CGI environment variables
-- CGI examples
-- CGI tutorials with cookies
-
-## Tools
-
-- Browser for real-world testing
-- `curl` for precise HTTP requests
-- Header testing websites
-- nginx documentation for understanding server and location selection
-
-## Server model: nginx documentation
-
-- Inside nginx architecture
-- Understanding nginx server and location block selection algorithms
-
-
-webserv
-
-This project is here to make you write your HTTP server. You will be able to test it with a real browser. HTTP is one of the most used protocols on the internet. Knowing its arcane will be useful, even if you won’t be working on a website.
-
-Tutorials
-
-    Building a simple web serveur in c++
-    C++ Web Programming: CGI program
-    HTTP
-    Build a simple HTTP server from scratch
-    Manage a socket flow of events using poll()
-    C++ programming applied to network (in French)
-    Network programming
-
-HTTP documentation
-
-    RFC 2616: HTTP 1.1 protocol
-    RFC 7230: HTTP/1.1 Message Syntax and Routing
-    List of HTTP status codes
-    Content-Type
-    Content-Type Stack List
-    Content-Type Full List
-    Tres bon site aussi !
-    HTTP messages
-    Redirections
-
-Useful RFCs
-
-    RFC editor: official source for RFCs on the World Wide Web.
-    RFC 2396: Uniform Resource Identifiers (URI): Generic Syntax: useful definitions of URI, port and host
-
-Useful C functions
-
-    socket: creates an endpoint for communication and returns a file descriptor that refers to that endpoint.
-    listen: listens for connections on a socket.
-    poll: waits for one of a set of file descriptors to become ready to perform I/O.
-    accept: accepts a connection on a socket.
-
-CGI Doc
-
-    RFC 3875: CGI
-    Best CGI Exemple: Programmation CGI in C++.
-    CGI Environmnent Variables
-    Good CGI Howto (and cookies)
-    Some exemples
-
-Tools
-
-    Super Mega Site pour tester les Headers !
-    cURL "--resolve"; curl -H "Host: ..." (for testing different server names).
-
-Server model: nginx documentation
-
-    Inside Nginx architecture
-    Understanding Nginx Server and Location Block Selection Algorithms
+- AI was used to expand the project README.
+- AI was used to summarize the subject requirements into a detailed checklist.
+- AI was used to explain HTTP, CGI, web server responsibilities, and testing
+  expectations in clearer language.
+- The team must review this README against the official subject and keep only
+  content they understand and can explain during evaluation.
