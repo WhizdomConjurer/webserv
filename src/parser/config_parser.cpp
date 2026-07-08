@@ -1,15 +1,15 @@
 #include "config_parser.hpp"
 
-/* Initializes an empty parser before a config file is loaded. */
+/* Initialisiert einen leeren Parser, bevor eine Config-Datei geladen wird. */
 ConfigParser::ConfigParser()
 {
 	this->_nb_server = 0;
 }
 
-/* Destroys the parser and releases vector-owned configuration data. */
+/* Zerstört den Parser; die gespeicherten Vektoren räumen ihre Daten selbst auf. */
 ConfigParser::~ConfigParser() { }
 
-/* Prints parsed server configuration values for manual debugging. */
+/* Gibt die geparsten Serverdaten auf stdout aus, um Config-Probleme manuell zu prüfen. */
 int ConfigParser::print()
 {
 	std::cout << "------------- Config -------------" << std::endl;
@@ -58,7 +58,7 @@ int ConfigParser::print()
 	return (0);
 }
 
-/* Validates, reads, cleans, splits, and converts the config file into server objects. */
+/* Prüft und liest die Config-Datei, entfernt Kommentare und erzeugt daraus ServerConfig-Objekte. */
 int ConfigParser::createCluster(const std::string &config_file)
 {
 	std::string		content;
@@ -87,7 +87,7 @@ int ConfigParser::createCluster(const std::string &config_file)
 	return (0);
 }
 
-/* Removes comments beginning with # up to the end of the line. */
+/* Entfernt Kommentare, die mit '#' beginnen und bis zum Zeilenende gehen. */
 void ConfigParser::removeComments(std::string &content)
 {
 	size_t pos;
@@ -105,7 +105,7 @@ void ConfigParser::removeComments(std::string &content)
 	}
 }
 
-/* Trims leading and trailing whitespace from the full config content. */
+/* Entfernt Whitespace am Anfang und Ende der gesamten Config. */
 void ConfigParser::removeWhiteSpace(std::string &content)
 {
 	size_t	i = 0;
@@ -121,7 +121,7 @@ void ConfigParser::removeWhiteSpace(std::string &content)
 	content = content.substr(0, i + 1);
 }
 
-/* Splits the file content into one raw string per server block. */
+/* Trennt den Config-Inhalt in einzelne rohe server{}-Blöcke. */
 void ConfigParser::splitServers(std::string &content)
 {
 	size_t start = 0;
@@ -141,7 +141,7 @@ void ConfigParser::splitServers(std::string &content)
 	}
 }
 
-/* Finds the opening brace of the next server block. */
+/* Sucht die öffnende Klammer des nächsten server{}-Blocks. */
 size_t ConfigParser::findStartServer (size_t start, std::string &content)
 {
 	size_t i;
@@ -167,7 +167,7 @@ size_t ConfigParser::findStartServer (size_t start, std::string &content)
 
 }
 
-/* Finds the matching closing brace for a server block. */
+/* Sucht die passende schließende Klammer zu einem server{}-Block. */
 size_t ConfigParser::findEndServer (size_t start, std::string &content)
 {
 	size_t	i;
@@ -188,7 +188,7 @@ size_t ConfigParser::findEndServer (size_t start, std::string &content)
 	return (start);
 }
 
-/* Splits a directive string on any separator character in sep. */
+/* Zerlegt einen Direktiven-Text an allen Zeichen, die in sep stehen. */
 std::vector<std::string> splitParameters(const std::string &line, const std::string &sep)
 {
 	std::vector<std::string>	str;
@@ -209,7 +209,7 @@ std::vector<std::string> splitParameters(const std::string &line, const std::str
 	return (str);
 }
 
-/* Creates a ServerConfig from one server block and validates required directives. */
+/* Baut aus einem server{}-Block eine ServerConfig und prüft Pflichtfelder/Duplikate. */
 void ConfigParser::createServer(std::string &config, ServerConfig &server)
 {
 	std::vector<std::string>	parametrs;
@@ -321,7 +321,7 @@ void ConfigParser::createServer(std::string &config, ServerConfig &server)
 		throw ErrorException("Incorrect path for error page or number of error");
 }
 
-/* Compares str2 against str1 at pos and ensures the match ends at whitespace/end. */
+/* Vergleicht str2 mit str1 ab pos und akzeptiert nur vollständige Wörter. */
 int	ConfigParser::stringCompare(const std::string &str1, const std::string &str2, size_t pos)
 {
 	size_t	i;
@@ -337,7 +337,7 @@ int	ConfigParser::stringCompare(const std::string &str1, const std::string &str2
 	return (1);
 }
 
-/* Rejects duplicate servers with identical host, port, and server_name. */
+/* Verhindert doppelte Server mit gleicher Host/Port/ServerName-Kombination. */
 void ConfigParser::checkServers()
 {
 	std::vector<ServerConfig>::iterator it1;
@@ -353,7 +353,7 @@ void ConfigParser::checkServers()
 	}
 }
 
-/* Returns the parsed server list without copying it. */
+/* Gibt die geparsten ServerConfigs als Referenz zurück, ohne sie zu kopieren. */
 const std::vector<ServerConfig>	&ConfigParser::getServers() const
 {
 	return (this->_servers);

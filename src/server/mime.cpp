@@ -1,6 +1,6 @@
 #include "mime.hpp"
 
-/* Returns a small dummy MIME type mapping for static-file tests. */
+/* Bestimmt anhand der Dateiendung den Content-Type für statische Antworten. */
 std::string Mime::getType(const std::string &path)
 {
 	const size_t dot = path.rfind('.');

@@ -1,16 +1,16 @@
 #include "config_file.hpp"
 
-/* Creates an empty config file helper. */
+/* Erstellt einen leeren Dateihelfer ohne gespeicherten Pfad. */
 ConfigFile::ConfigFile() : _size(0) { }
 
-/* Stores the config path that should later be checked and read. */
+/* Speichert den Config-Pfad, der später geprüft und gelesen wird. */
 ConfigFile::ConfigFile(const std::string &path) : _path(path), _size(0) { }
 
-/* Destroys the helper; no dynamic resources are owned. */
+/* Zerstört den Dateihelfer; dynamische Ressourcen werden nicht gehalten. */
 ConfigFile::~ConfigFile() { }
 
 
-/* Returns 1 for regular file, 2 for directory, 3 for other, or -1 on stat failure. */
+/* Klassifiziert einen Pfad: 1 Datei, 2 Ordner, 3 sonstiger Typ, -1 bei stat()-Fehler. */
 int ConfigFile::getTypePath(const std::string &path)
 {
 	struct stat	buffer;
@@ -30,13 +30,13 @@ int ConfigFile::getTypePath(const std::string &path)
 		return (-1);
 }
 
-/* Wraps access() to check whether path satisfies the requested permission mode. */
+/* Prüft mit access(), ob ein Pfad die gewünschten Rechte erfüllt. */
 int	ConfigFile::checkFile(const std::string &path, int mode)
 {
 	return (access(path.c_str(), mode));
 }
 
-/* Checks whether index is readable either as absolute path or relative to path. */
+/* Prüft, ob index direkt oder relativ zu path als lesbare Datei existiert. */
 int ConfigFile::isFileExistAndReadable(const std::string &path, const std::string &index)
 {
 	if (getTypePath(index) == 1 && checkFile(index, 4) == 0)
@@ -46,7 +46,7 @@ int ConfigFile::isFileExistAndReadable(const std::string &path, const std::strin
 	return (-1);
 }
 
-/* Reads the whole file into a string; returns an empty string on failure. */
+/* Liest eine komplette Datei in einen String und gibt bei Fehler einen leeren String zurück. */
 std::string	ConfigFile::readFile(const std::string &path)
 {
 	if (path.empty())
@@ -60,13 +60,13 @@ std::string	ConfigFile::readFile(const std::string &path)
 	return (stream_binding.str());
 }
 
-/* Returns the stored configuration file path. */
+/* Gibt den gespeicherten Config-Dateipfad zurück. */
 const std::string &ConfigFile::getPath() const
 {
 	return (_path);
 }
 
-/* Returns the cached file size value, currently unused and initialized to 0. */
+/* Gibt die gespeicherte Dateigröße zurück; aktuell bleibt sie ungenutzt bei 0. */
 size_t ConfigFile::getSize() const
 {
 	return (_size);

@@ -1,13 +1,13 @@
 #include "webserv.hpp"
 #include "server/server_manager.hpp"
 
-/* Ignores SIGPIPE so failed socket writes do not terminate the server process. */
+/* Fängt SIGPIPE ab, damit ein abgebrochener Client den Serverprozess nicht beendet. */
 void sigpipeHandle(int sig)
 {
 	(void)sig;
 }
 
-/* Parses arguments, loads configuration, initializes servers, and starts the loop. */
+/* Programmeinstieg: liest die Config, baut daraus ServerConfig-Objekte und startet den ServerManager. */
 int main(int argc, char **argv) 
 {
 	// Logger::setState(OFF);
@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 			ConfigParser	cluster;
 			ServerManager 	master;
 			signal(SIGPIPE, sigpipeHandle);
-			/* configuration file as argument or default path */
+			/* Ohne Argument wird die Default-Config genutzt, sonst die vom Benutzer angegebene Datei. */
 			config = (argc == 1 ? "configs/default.conf" : argv[1]);
 			cluster.createCluster(config);
 			// cluster.print(); // for checking

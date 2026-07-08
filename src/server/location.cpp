@@ -1,6 +1,6 @@
 #include "location.hpp"
 
-/* Creates an empty dummy route with safe defaults. */
+/* Erstellt eine Location mit sicheren Defaults für Root, Index und deaktivierte Extras. */
 Location::Location()
 	: _path("/"),
 	  _root("./www/"),
@@ -10,7 +10,7 @@ Location::Location()
 {
 }
 
-/* Creates a dummy route for one path while keeping safe defaults. */
+/* Erstellt eine Location für einen bestimmten URL-Pfad und übernimmt die Default-Werte. */
 Location::Location(const std::string &path)
 	: _path(cleanToken(path)),
 	  _root("./www/"),
@@ -20,10 +20,10 @@ Location::Location(const std::string &path)
 {
 }
 
-/* Destroys the route; all owned data is STL-managed. */
+/* Zerstört die Location; Strings und Container räumen sich selbst auf. */
 Location::~Location() {}
 
-/* Removes a trailing semicolon from one config token. */
+/* Entfernt ein abschließendes Semikolon aus einem Config-Token. */
 std::string Location::cleanToken(const std::string &value) const
 {
 	if (!value.empty() && value[value.length() - 1] == ';')
@@ -31,13 +31,13 @@ std::string Location::cleanToken(const std::string &value) const
 	return (value);
 }
 
-/* Stores the route path, for example /cgi-bin or /static. */
+/* Speichert den URL-Pfad dieser Location, z.B. /cgi-bin oder /static. */
 void Location::setPath(const std::string &path)
 {
 	_path = cleanToken(path);
 }
 
-/* Stores the filesystem root used to resolve requests in this route. */
+/* Speichert den Dateisystem-Root, aus dem diese Location Dateien auflöst. */
 void Location::setRootLocation(const std::string &root)
 {
 	_root = cleanToken(root);
@@ -45,63 +45,63 @@ void Location::setRootLocation(const std::string &root)
 		_root += "/";
 }
 
-/* Stores the default index file served for directory requests. */
+/* Speichert die Index-Datei für Verzeichnisanfragen in dieser Location. */
 void Location::setIndexLocation(const std::string &index)
 {
 	_index = cleanToken(index);
 }
 
-/* Enables or disables autoindex for directory requests. */
+/* Aktiviert oder deaktiviert Verzeichnislisting für diese Location. */
 void Location::setAutoindex(const std::string &value)
 {
 	const std::string clean = cleanToken(value);
 	_autoindex = (clean == "on" || clean == "true" || clean == "1");
 }
 
-/* Stores the redirection target configured for this route. */
+/* Speichert das Weiterleitungsziel einer return-Direktive. */
 void Location::setReturn(const std::string &value)
 {
 	_return = cleanToken(value);
 }
 
-/* Stores an alias path for this route. */
+/* Speichert einen Alias-Pfad, der den normalen Root ersetzen kann. */
 void Location::setAlias(const std::string &value)
 {
 	_alias = cleanToken(value);
 }
 
-/* Stores the directory where uploaded files should be written. */
+/* Speichert das Zielverzeichnis für hochgeladene Dateien. */
 void Location::setUploadPath(const std::string &path)
 {
 	_upload_path = cleanToken(path);
 }
 
-/* Enables or disables uploads for this route. */
+/* Aktiviert oder deaktiviert Uploads in dieser Location. */
 void Location::setUploadEnabled(const std::string &value)
 {
 	const std::string clean = cleanToken(value);
 	_upload_enabled = (clean == "on" || clean == "true" || clean == "1");
 }
 
-/* Adds one accepted HTTP method to the route. */
+/* Fügt eine erlaubte HTTP-Methode hinzu, z.B. GET oder POST. */
 void Location::addMethod(const std::string &method)
 {
 	_methods.insert(cleanToken(method));
 }
 
-/* Adds one CGI executable/interpreter path. */
+/* Fügt einen CGI-Interpreter oder ausführbaren Pfad hinzu. */
 void Location::addCgiPath(const std::string &path)
 {
 	_cgi_path.push_back(cleanToken(path));
 }
 
-/* Adds one extension that should be handled as CGI. */
+/* Fügt eine Dateiendung hinzu, die als CGI behandelt werden soll. */
 void Location::addCgiExtension(const std::string &extension)
 {
 	_cgi_extension.push_back(cleanToken(extension));
 }
 
-/* Adds an extension-to-executable mapping used by CgiHandler::initEnv(). */
+/* Verknüpft eine CGI-Endung mit dem passenden Interpreter für CgiHandler::initEnv(). */
 void Location::addCgiMapping(const std::string &extension, const std::string &exec_path)
 {
 	const std::string clean_ext = cleanToken(extension);
@@ -111,7 +111,7 @@ void Location::addCgiMapping(const std::string &extension, const std::string &ex
 	addCgiPath(clean_exec);
 }
 
-/* Parses the minimal route directives needed by the current parser and CGI code. */
+/* Interpretiert einzelne Location-Direktiven aus der Tokenliste des Parsers. */
 void Location::parseDirective(const std::vector<std::string> &tokens, size_t &i)
 {
 	if (tokens[i] == "root" && i + 1 < tokens.size())
@@ -143,7 +143,7 @@ void Location::parseDirective(const std::vector<std::string> &tokens, size_t &i)
 	}
 }
 
-/* Loads a whole location block token list into this dummy route object. */
+/* Lädt alle Tokens eines location{}-Blocks in dieses Location-Objekt. */
 void Location::loadDirectives(const std::vector<std::string> &tokens)
 {
 	for (size_t i = 0; i < tokens.size(); ++i)
@@ -156,67 +156,67 @@ void Location::loadDirectives(const std::vector<std::string> &tokens)
 	}
 }
 
-/* Returns the configured route path. */
+/* Gibt den URL-Pfad dieser Location zurück. */
 const std::string &Location::getPath() const
 {
 	return (_path);
 }
 
-/* Returns the filesystem root configured for this route. */
+/* Gibt den Dateisystem-Root dieser Location zurück. */
 const std::string &Location::getRootLocation() const
 {
 	return (_root);
 }
 
-/* Returns the configured directory index file. */
+/* Gibt die konfigurierte Index-Datei dieser Location zurück. */
 const std::string &Location::getIndexLocation() const
 {
 	return (_index);
 }
 
-/* Returns the configured redirect target. */
+/* Gibt das konfigurierte Weiterleitungsziel zurück. */
 const std::string &Location::getReturn() const
 {
 	return (_return);
 }
 
-/* Returns the configured alias path. */
+/* Gibt den konfigurierten Alias-Pfad zurück. */
 const std::string &Location::getAlias() const
 {
 	return (_alias);
 }
 
-/* Returns the configured upload storage path. */
+/* Gibt den Upload-Speicherpfad zurück. */
 const std::string &Location::getUploadPath() const
 {
 	return (_upload_path);
 }
 
-/* Returns whether directory listing is enabled. */
+/* Gibt zurück, ob Verzeichnislisting aktiviert ist. */
 bool Location::getAutoindex() const
 {
 	return (_autoindex);
 }
 
-/* Returns whether uploads are enabled. */
+/* Gibt zurück, ob Uploads aktiviert sind. */
 bool Location::getUploadEnabled() const
 {
 	return (_upload_enabled);
 }
 
-/* Returns the configured CGI executable/interpreter paths. */
+/* Gibt die konfigurierten CGI-Interpreterpfade zurück. */
 const std::vector<std::string> &Location::getCgiPath() const
 {
 	return (_cgi_path);
 }
 
-/* Returns the configured CGI extensions. */
+/* Gibt die Dateiendungen zurück, die als CGI gelten. */
 const std::vector<std::string> &Location::getCgiExtension() const
 {
 	return (_cgi_extension);
 }
 
-/* Returns accepted methods as a printable comma-separated string. */
+/* Gibt die erlaubten Methoden als kommaseparierten Text für Debug-Ausgaben zurück. */
 std::string Location::getPrintMethods() const
 {
 	std::stringstream out;
@@ -229,7 +229,7 @@ std::string Location::getPrintMethods() const
 	return (out.str());
 }
 
-/* Returns true if the route accepts method or no explicit method list exists. */
+/* Prüft, ob diese Location die angefragte HTTP-Methode erlaubt. */
 bool Location::acceptsMethod(const std::string &method) const
 {
 	return (_methods.empty() || _methods.find(method) != _methods.end());

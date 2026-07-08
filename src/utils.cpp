@@ -1,6 +1,6 @@
 #include "webserv.hpp"
 
-/* Converts a decimal string to int and rejects non-digits or overly long values. */
+/* Wandelt einen Dezimalstring in int um und lehnt Nicht-Ziffern oder zu lange Werte ab. */
 int ft_stoi(std::string str)
 {
     std::stringstream ss(str);
@@ -16,7 +16,7 @@ int ft_stoi(std::string str)
     return (res);
 }
 
-/* Converts a hexadecimal byte string into an unsigned integer. */
+/* Wandelt einen hexadezimalen Byte-String, z.B. "20", in eine Zahl um. */
 unsigned int fromHexToDec(const std::string& nb)
 {
 	unsigned int x;
@@ -26,7 +26,7 @@ unsigned int fromHexToDec(const std::string& nb)
 	return (x);
 }
 
-/* Maps an HTTP status code to its reason phrase. */
+/* Liefert zum HTTP-Statuscode den offiziellen/üblichen Reason-Phrase-Text. */
 std::string statusCodeString(short statusCode)
 {
     switch (statusCode)
@@ -138,7 +138,7 @@ std::string statusCodeString(short statusCode)
         }
 }
 
-/* Builds a small default HTML error page for the given HTTP status. */
+/* Baut eine einfache HTML-Fehlerseite für den angegebenen HTTP-Statuscode. */
 std::string getErrorPage(short statusCode)
 {
     return ("<html>\r\n<head><title>" + toString(statusCode) + " " +
@@ -146,7 +146,7 @@ std::string getErrorPage(short statusCode)
             "<center><h1>" + toString(statusCode) + " " + statusCodeString(statusCode) + "</h1></center>\r\n");
 }
 
-/* Builds a simple HTML directory index page and stores it in the response body. */
+/* Baut eine einfache HTML-Verzeichnisliste und schreibt sie als Bytes in den Response-Body. */
 int buildHtmlIndex(std::string &dir_name, std::vector<uint8_t> &body, size_t &body_len)
 {
     struct dirent   *entityStruct;

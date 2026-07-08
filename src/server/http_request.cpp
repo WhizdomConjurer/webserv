@@ -1,7 +1,7 @@
 #include "http_request.hpp"
 #include <cctype>
 
-/* Creates a minimal request object that can be passed into the CGI handler. */
+/* Erstellt eine minimale GET-Anfrage als Default, damit das Objekt sofort gültig ist. */
 HttpRequest::HttpRequest()
 	: _method(GET),
 	  _method_str("GET"),
@@ -11,10 +11,10 @@ HttpRequest::HttpRequest()
 {
 }
 
-/* Destroys the dummy request; STL members own all data. */
+/* Zerstört die Anfrage; Strings und Header-Map räumen sich selbst auf. */
 HttpRequest::~HttpRequest() {}
 
-/* Stores the enum method and keeps the method string in sync. */
+/* Speichert die HTTP-Methode als enum und hält den Textwert synchron. */
 void HttpRequest::setMethod(HttpMethod method)
 {
 	_method = method;
@@ -28,7 +28,7 @@ void HttpRequest::setMethod(HttpMethod method)
 		_method_str = "UNKNOWN";
 }
 
-/* Stores a method string and derives the enum used by existing CGI code. */
+/* Speichert die Methode als Text und leitet daraus das passende enum ab. */
 void HttpRequest::setMethodStr(const std::string &method)
 {
 	_method_str = method;
@@ -42,25 +42,25 @@ void HttpRequest::setMethodStr(const std::string &method)
 		_method = UNKNOWN_METHOD;
 }
 
-/* Stores the request path without parsing or normalization. */
+/* Speichert den Anfragepfad ohne weitere Normalisierung. */
 void HttpRequest::setPath(const std::string &path)
 {
 	_path = path;
 }
 
-/* Stores the raw query string without the leading question mark. */
+/* Speichert den rohen Query-String ohne führendes Fragezeichen. */
 void HttpRequest::setQuery(const std::string &query)
 {
 	_query = query;
 }
 
-/* Stores the request body used for POST CGI tests. */
+/* Speichert den Request-Body, z.B. für POST-Anfragen an CGI. */
 void HttpRequest::setBody(const std::string &body)
 {
 	_body = body;
 }
 
-/* Stores a header using a lower-case key for case-insensitive dummy lookup. */
+/* Speichert Header mit kleingeschriebenem Namen, damit Lookups case-insensitive funktionieren. */
 void HttpRequest::setHeader(const std::string &key, const std::string &value)
 {
 	std::string lower = key;
@@ -69,37 +69,37 @@ void HttpRequest::setHeader(const std::string &key, const std::string &value)
 	_headers[lower] = value;
 }
 
-/* Returns the enum HTTP method. */
+/* Gibt die HTTP-Methode als enum zurück. */
 HttpMethod HttpRequest::getMethod() const
 {
 	return (_method);
 }
 
-/* Returns the HTTP method as text. */
+/* Gibt die HTTP-Methode als Text zurück. */
 const std::string &HttpRequest::getMethodStr() const
 {
 	return (_method_str);
 }
 
-/* Returns the request path. */
+/* Gibt den Anfragepfad zurück. */
 const std::string &HttpRequest::getPath() const
 {
 	return (_path);
 }
 
-/* Returns the raw query string. */
+/* Gibt den rohen Query-String zurück. */
 std::string HttpRequest::getQuery() const
 {
 	return (_query);
 }
 
-/* Returns the request body. */
+/* Gibt den Request-Body zurück. */
 const std::string &HttpRequest::getBody() const
 {
 	return (_body);
 }
 
-/* Returns a header value or an empty string when the header is absent. */
+/* Sucht einen Header unabhängig von Groß-/Kleinschreibung und gibt sonst "" zurück. */
 std::string HttpRequest::getHeader(const std::string &key) const
 {
 	std::string lower = key;
@@ -111,7 +111,7 @@ std::string HttpRequest::getHeader(const std::string &key) const
 	return (found->second);
 }
 
-/* Returns all stored headers for CGI HTTP_* environment generation. */
+/* Gibt alle gespeicherten Header zurück, damit CGI daraus HTTP_*-Umgebungsvariablen bauen kann. */
 const std::map<std::string, std::string> &HttpRequest::getHeaders() const
 {
 	return (_headers);

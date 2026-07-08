@@ -12,8 +12,8 @@ class Session:
     def __init__(self, name):
         self.name = name
         self.sid = hashlib.sha1(str(time.time()).encode("utf-8")).hexdigest()
-        os.makedirs('cgi-bin/sessions', exist_ok=True)
-        with open('cgi-bin/sessions/session_' + self.sid, 'wb') as f:
+        os.makedirs('sessions', exist_ok=True)
+        with open('sessions/session_' + self.sid, 'wb') as f:
             pickle.dump(self, f)
 
     """Return the session identifier used as cookie value."""
@@ -30,7 +30,7 @@ class UserDataBase:
     def addUser(self, username, password, firstname):
         self.user_pass[username] = password
         self.user_firstname[username] = firstname
-        with open('cgi-bin/user_database', 'wb') as f:
+        with open('user_database', 'wb') as f:
             pickle.dump(self, f)
 
 
@@ -90,8 +90,8 @@ def printLogin():
 
 def authUser(name, password):
     """Return a new session if the supplied credentials match the database."""
-    if os.path.exists('cgi-bin/user_database'):
-        with open('cgi-bin/user_database', 'rb') as f:
+    if os.path.exists('user_database'):
+        with open('user_database', 'rb') as f:
             database = pickle.load(f)
             if name in database.user_pass and database.user_pass[name] == password:
                 session = Session(database.user_firstname[name])
@@ -122,8 +122,8 @@ def handleLogin():
             print("Location: acc.py")
             print("\r\n")
     else :
-        if os.path.exists('cgi-bin/user_database'):
-            with open('cgi-bin/user_database', 'rb') as f:
+        if os.path.exists('user_database'):
+            with open('user_database', 'rb') as f:
                 database = pickle.load(f)
                 if username in database.user_pass:
                     printUserMsg("Username is already registered!")
@@ -145,7 +145,7 @@ if 'HTTP_COOKIE' in os.environ:
 
     if "SID" in cookies:
         print("Your Session ID is", cookies["SID"].value,file=sys.stderr)
-        session_path = 'cgi-bin/sessions/session_' + cookies["SID"].value
+        session_path = 'sessions/session_' + cookies["SID"].value
         if os.path.exists(session_path):
             with open(session_path, 'rb') as f:
                 sess = pickle.load(f)

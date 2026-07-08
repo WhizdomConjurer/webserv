@@ -5,6 +5,8 @@
 # include "http_request.hpp"
 # include <vector>
 
+class CgiHandler;
+
 class ServerManager
 {
 	private:
@@ -15,6 +17,13 @@ class ServerManager
 		void		handleClient(int client_fd, const ServerConfig &server);
 		bool		readRequest(int client_fd, std::string &raw_request) const;
 		HttpRequest	parseRequest(const std::string &raw_request) const;
+		std::string	getHeaderValue(const std::string &headers, const std::string &name) const;
+		bool		hasChunkedBody(const std::string &headers) const;
+		bool		isChunkedBodyComplete(const std::string &raw_request) const;
+		std::string	decodeChunkedBody(const std::string &body) const;
+		bool		setNonBlocking(int fd) const;
+		bool		runCgiWithSelect(CgiHandler &cgi, const std::string &body,
+						std::string &cgi_output) const;
 		std::string	buildStaticResponse(const ServerConfig &server, const HttpRequest &request) const;
 		std::string	buildCgiResponse(const ServerConfig &server, HttpRequest &request) const;
 		std::string	normalizeCgiOutput(const std::string &cgi_output) const;

@@ -12,19 +12,20 @@
 #include <sstream>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <ctime>
 #include <unistd.h>
 
-/* Creates an empty test manager; this version is only for local CGI browser tests. */
+/* Erstellt einen leeren Manager; die eigentlichen ServerConfig-Objekte kommen später über setupServers(). */
 ServerManager::ServerManager()
 {
 }
 
-/* Destroys the test manager; sockets are closed inside runServers()/serveLoop(). */
+/* Räumt den Manager auf; offene Sockets werden im Loop selbst geschlossen. */
 ServerManager::~ServerManager()
 {
 }
 
-/* Stores parsed server configs so the lightweight test server can use them. */
+/* Speichert alle vom Parser erzeugten Serverblöcke, damit der Manager daraus Listener bauen kann. */
 void ServerManager::setupServers(const std::vector<ServerConfig> &servers)
 {
 	_servers = servers;
@@ -32,7 +33,15 @@ void ServerManager::setupServers(const std::vector<ServerConfig> &servers)
 		static_cast<unsigned long>(_servers.size()));
 }
 
-/* Starts one small blocking HTTP server for local static-file and CGI testing. */
+/*
+ * Startet den HTTP-Loop.
+ *
+ * Wichtig für "mehreren Servern zuhören":
+ * Der Parser kann mehrere server{}-Blöcke laden, aber diese aktuelle Testversion
+ * nimmt nur _servers[0], erstellt genau einen listen_fd und blockiert dann in accept().
+ * Ein echter Mehrserver-Loop würde für jeden Server einen eigenen listen_fd anlegen
+ * und alle FDs gemeinsam mit select(), poll() oder kqueue/epoll überwachen.
+ */
 void ServerManager::runServers()
 {
 	if (_servers.empty())
@@ -52,7 +61,7 @@ void ServerManager::runServers()
 	serveLoop(listen_fd, server);
 }
 
-/* Creates, binds, and listens on one TCP socket for the configured port. */
+/* Erstellt einen TCP-Socket, bindet ihn an den konfigurierten Port und schaltet listen() ein. */
 int ServerManager::createListenSocket(const ServerConfig &server) const
 {
 	const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -87,7 +96,7 @@ int ServerManager::createListenSocket(const ServerConfig &server) const
 	return (fd);
 }
 
-/* Accepts clients one by one; this is intentionally simple and blocking for testing. */
+/* Nimmt Clients nacheinander an; accept() blockiert hier, bis ein Client verbunden ist. */
 void ServerManager::serveLoop(int listen_fd, const ServerConfig &server)
 {
 	while (true)
@@ -106,7 +115,7 @@ void ServerManager::serveLoop(int listen_fd, const ServerConfig &server)
 	::close(listen_fd);
 }
 
-/* Reads one request, dispatches to CGI or static handling, and sends the response. */
+/* Liest eine Anfrage, entscheidet zwischen CGI und statischer Datei und sendet die fertige Antwort. */
 void ServerManager::handleClient(int client_fd, const ServerConfig &server)
 {
 	std::string raw_request;
@@ -126,7 +135,7 @@ void ServerManager::handleClient(int client_fd, const ServerConfig &server)
 	sendAll(client_fd, response);
 }
 
-/* Reads headers and the optional Content-Length body for a single HTTP request. */
+/* Liest HTTP-Header und danach Content-Length- oder chunked-Body vollständig ein. */
 bool ServerManager::readRequest(int client_fd, std::string &raw_request) const
 {
 	char buffer[4096];
@@ -144,16 +153,23 @@ bool ServerManager::readRequest(int client_fd, std::string &raw_request) const
 
 	const size_t header_end = raw_request.find("\r\n\r\n");
 	const std::string headers = raw_request.substr(0, header_end);
-	const std::string key = "Content-Length:";
-	const size_t len_pos = headers.find(key);
-	if (len_pos != std::string::npos)
+	if (hasChunkedBody(headers))
 	{
-		size_t value_pos = len_pos + key.length();
-		while (value_pos < headers.length() && std::isspace(headers[value_pos]))
-			++value_pos;
-		expected_body = static_cast<size_t>(std::atol(headers.c_str() + value_pos));
+		while (!isChunkedBodyComplete(raw_request))
+		{
+			const ssize_t n = ::recv(client_fd, buffer, sizeof(buffer), 0);
+			if (n <= 0)
+				return (false);
+			raw_request.append(buffer, static_cast<size_t>(n));
+			if (raw_request.size() > MAX_CONTENT_LENGTH)
+				return (false);
+		}
+		return (true);
 	}
 
+	const std::string content_length = getHeaderValue(headers, "Content-Length");
+	if (!content_length.empty())
+		expected_body = static_cast<size_t>(std::atol(content_length.c_str()));
 	while (raw_request.size() < header_end + 4 + expected_body)
 	{
 		const ssize_t n = ::recv(client_fd, buffer, sizeof(buffer), 0);
@@ -164,7 +180,90 @@ bool ServerManager::readRequest(int client_fd, std::string &raw_request) const
 	return (true);
 }
 
-/* Parses the request line, headers, query string, and body into HttpRequest. */
+/* Sucht einen Header case-insensitive in einem rohen Headerblock. */
+std::string ServerManager::getHeaderValue(const std::string &headers,
+	const std::string &name) const
+{
+	size_t pos = 0;
+	while (pos < headers.length())
+	{
+		const size_t end = headers.find("\r\n", pos);
+		const std::string line = headers.substr(pos,
+			(end == std::string::npos ? headers.length() : end) - pos);
+		const size_t colon = line.find(':');
+		if (colon != std::string::npos)
+		{
+			std::string key = line.substr(0, colon);
+			std::string wanted = name;
+			for (size_t i = 0; i < key.length(); ++i)
+				key[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[i])));
+			for (size_t i = 0; i < wanted.length(); ++i)
+				wanted[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(wanted[i])));
+			if (key == wanted)
+			{
+				size_t value = colon + 1;
+				while (value < line.length() && std::isspace(line[value]))
+					++value;
+				return (line.substr(value));
+			}
+		}
+		if (end == std::string::npos)
+			break;
+		pos = end + 2;
+	}
+	return ("");
+}
+
+/* Prüft, ob Transfer-Encoding: chunked gesetzt ist. */
+bool ServerManager::hasChunkedBody(const std::string &headers) const
+{
+	std::string transfer_encoding = getHeaderValue(headers, "Transfer-Encoding");
+	for (size_t i = 0; i < transfer_encoding.length(); ++i)
+		transfer_encoding[i] = static_cast<char>(
+			std::tolower(static_cast<unsigned char>(transfer_encoding[i])));
+	return (transfer_encoding.find("chunked") != std::string::npos);
+}
+
+/* Erkennt das Ende eines chunked Bodys anhand des finalen 0-Chunks. */
+bool ServerManager::isChunkedBodyComplete(const std::string &raw_request) const
+{
+	const size_t header_end = raw_request.find("\r\n\r\n");
+	if (header_end == std::string::npos)
+		return (false);
+	const std::string body = raw_request.substr(header_end + 4);
+	if (body.length() < 5)
+		return (false);
+	return (body.find("\r\n0\r\n\r\n") != std::string::npos
+		|| body.find("\r\n0\r\n") == body.length() - 5);
+}
+
+/* Dekodiert einen Transfer-Encoding: chunked Body in den rohen CGI-Body. */
+std::string ServerManager::decodeChunkedBody(const std::string &body) const
+{
+	std::string decoded;
+	size_t pos = 0;
+	while (pos < body.length())
+	{
+		const size_t line_end = body.find("\r\n", pos);
+		if (line_end == std::string::npos)
+			break;
+		std::string size_text = body.substr(pos, line_end - pos);
+		const size_t extension = size_text.find(';');
+		if (extension != std::string::npos)
+			size_text = size_text.substr(0, extension);
+		const size_t chunk_size = static_cast<size_t>(fromHexToDec(size_text));
+		pos = line_end + 2;
+		if (chunk_size == 0)
+			break;
+		if (pos + chunk_size > body.length())
+			break;
+		decoded.append(body, pos, chunk_size);
+		pos += chunk_size + 2;
+	}
+	return (decoded);
+}
+
+/* Zerlegt den rohen HTTP-Text in Methode, Pfad, Query, Header und Body. */
 HttpRequest ServerManager::parseRequest(const std::string &raw_request) const
 {
 	HttpRequest request;
@@ -201,11 +300,109 @@ HttpRequest ServerManager::parseRequest(const std::string &raw_request) const
 
 	const size_t header_end = raw_request.find("\r\n\r\n");
 	if (header_end != std::string::npos)
-		request.setBody(raw_request.substr(header_end + 4));
+	{
+		if (request.getHeader("transfer-encoding").find("chunked") != std::string::npos)
+			request.setBody(decodeChunkedBody(raw_request.substr(header_end + 4)));
+		else
+			request.setBody(raw_request.substr(header_end + 4));
+	}
 	return (request);
 }
 
-/* Builds a static-file response from the configured document root. */
+/* Schaltet einen Descriptor auf non-blocking, damit select() die CGI-Pipes steuern kann. */
+bool ServerManager::setNonBlocking(int fd) const
+{
+	if (fd < 0)
+		return (false);
+	return (::fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
+}
+
+/* Bedient CGI-stdin und CGI-stdout mit select() und bricht hängende Prozesse nach Timeout ab. */
+bool ServerManager::runCgiWithSelect(CgiHandler &cgi, const std::string &body,
+	std::string &cgi_output) const
+{
+	const time_t start = std::time(NULL);
+	const int timeout_seconds = 5;
+	size_t written = 0;
+	bool input_open = (cgi.pipe_in[1] >= 0);
+	bool output_open = (cgi.pipe_out[0] >= 0);
+	char buffer[4096];
+
+	if (!setNonBlocking(cgi.pipe_in[1]) || !setNonBlocking(cgi.pipe_out[0]))
+		return (false);
+	while (input_open || output_open)
+	{
+		if (std::time(NULL) - start > timeout_seconds)
+		{
+			if (cgi.getCgiPid() > 0)
+				::kill(cgi.getCgiPid(), SIGKILL);
+			return (false);
+		}
+
+		fd_set readfds;
+		fd_set writefds;
+		FD_ZERO(&readfds);
+		FD_ZERO(&writefds);
+		int max_fd = -1;
+		if (output_open)
+		{
+			FD_SET(cgi.pipe_out[0], &readfds);
+			max_fd = std::max(max_fd, cgi.pipe_out[0]);
+		}
+		if (input_open && written < body.length())
+		{
+			FD_SET(cgi.pipe_in[1], &writefds);
+			max_fd = std::max(max_fd, cgi.pipe_in[1]);
+		}
+		else if (input_open)
+		{
+			::close(cgi.pipe_in[1]);
+			cgi.pipe_in[1] = -1;
+			input_open = false;
+			continue;
+		}
+
+		struct timeval tv;
+		tv.tv_sec = 1;
+		tv.tv_usec = 0;
+		const int ready = ::select(max_fd + 1, &readfds, &writefds, NULL, &tv);
+		if (ready < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return (false);
+		}
+		if (ready == 0)
+			continue;
+
+		if (input_open && FD_ISSET(cgi.pipe_in[1], &writefds))
+		{
+			const ssize_t n = ::write(cgi.pipe_in[1], body.c_str() + written,
+				body.length() - written);
+			if (n > 0)
+				written += static_cast<size_t>(n);
+			else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+				return (false);
+		}
+		if (output_open && FD_ISSET(cgi.pipe_out[0], &readfds))
+		{
+			const ssize_t n = ::read(cgi.pipe_out[0], buffer, sizeof(buffer));
+			if (n > 0)
+				cgi_output.append(buffer, static_cast<size_t>(n));
+			else if (n == 0)
+			{
+				::close(cgi.pipe_out[0]);
+				cgi.pipe_out[0] = -1;
+				output_open = false;
+			}
+			else if (errno != EAGAIN && errno != EWOULDBLOCK)
+				return (false);
+		}
+	}
+	return (true);
+}
+
+/* Sucht eine statische Datei im Document Root und baut daraus eine HTTP-Antwort. */
 std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	const HttpRequest &request) const
 {
@@ -230,7 +427,7 @@ std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	return (buildHttpResponse(200, Mime::getType(file_path), body.str()));
 }
 
-/* Executes a configured Python CGI through CgiHandler and wraps its output as HTTP. */
+/* Startet ein konfiguriertes CGI-Skript und verpackt dessen Ausgabe als HTTP-Antwort. */
 std::string ServerManager::buildCgiResponse(const ServerConfig &server, HttpRequest &request) const
 {
 	const Location *location = findCgiLocation(server, request.getPath());
@@ -253,27 +450,24 @@ std::string ServerManager::buildCgiResponse(const ServerConfig &server, HttpRequ
 	if (error)
 		return (buildHttpResponse(error, "text/html", getErrorPage(error)));
 
-	if (!request.getBody().empty())
-		::write(cgi.pipe_in[1], request.getBody().c_str(), request.getBody().length());
-	::close(cgi.pipe_in[1]);
-	cgi.pipe_in[1] = -1;
-
 	std::string cgi_output;
-	char buffer[4096];
-	ssize_t n;
-	while ((n = ::read(cgi.pipe_out[0], buffer, sizeof(buffer))) > 0)
-		cgi_output.append(buffer, static_cast<size_t>(n));
-	::close(cgi.pipe_out[0]);
-	cgi.pipe_out[0] = -1;
+	if (!runCgiWithSelect(cgi, request.getBody(), cgi_output))
+	{
+		int status = 0;
+		::waitpid(cgi.getCgiPid(), &status, 0);
+		return (buildHttpResponse(504, "text/html", getErrorPage(504)));
+	}
 
 	int status = 0;
 	::waitpid(cgi.getCgiPid(), &status, 0);
+	if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
+		return (buildHttpResponse(502, "text/html", getErrorPage(502)));
 	if (!cgi_output.empty() && cgi_output.find("HTTP/1.1") == 0)
 		return (cgi_output);
 	return (normalizeCgiOutput(cgi_output));
 }
 
-/* Converts CGI headers/body into a complete HTTP/1.1 response for browser testing. */
+/* Wandelt CGI-Ausgabe mit Header/Body-Trennung in eine vollständige HTTP/1.1-Antwort um. */
 std::string ServerManager::normalizeCgiOutput(const std::string &cgi_output) const
 {
 	std::string normalized = cgi_output;
@@ -326,7 +520,7 @@ std::string ServerManager::normalizeCgiOutput(const std::string &cgi_output) con
 	return (response.str());
 }
 
-/* Builds a normal HTTP response with Content-Length and Connection close. */
+/* Baut eine normale HTTP-Antwort inklusive Statuszeile, Content-Type, Content-Length und Body. */
 std::string ServerManager::buildHttpResponse(short status, const std::string &content_type,
 	const std::string &body) const
 {
@@ -339,7 +533,7 @@ std::string ServerManager::buildHttpResponse(short status, const std::string &co
 	return (response.str());
 }
 
-/* Builds a simple 302 redirect response for future route testing. */
+/* Baut eine einfache 302-Weiterleitung mit Location-Header. */
 std::string ServerManager::buildRedirectResponse(const std::string &location) const
 {
 	std::stringstream response;
@@ -350,7 +544,7 @@ std::string ServerManager::buildRedirectResponse(const std::string &location) co
 	return (response.str());
 }
 
-/* Returns a marker string when HTTP headers are complete; kept for future real parser. */
+/* Prüft, ob die HTTP-Header vollständig sind, und gibt den Header-Endmarker zurück. */
 std::string ServerManager::findHeaderEnd(const std::string &raw_request) const
 {
 	const size_t pos = raw_request.find("\r\n\r\n");
@@ -359,7 +553,7 @@ std::string ServerManager::findHeaderEnd(const std::string &raw_request) const
 	return (raw_request.substr(pos, 4));
 }
 
-/* Decodes minimal percent-encoding for static and CGI URL paths. */
+/* Dekodiert einfache Prozentkodierung in URLs, z.B. %20 zu Leerzeichen. */
 std::string ServerManager::urlDecode(const std::string &value) const
 {
 	std::string decoded = value;
@@ -374,7 +568,7 @@ std::string ServerManager::urlDecode(const std::string &value) const
 	return (decoded);
 }
 
-/* Extracts the path part from a request target. */
+/* Entfernt die Query aus einem Request-Target und gibt nur den URL-Pfad zurück. */
 std::string ServerManager::getPathWithoutQuery(const std::string &target) const
 {
 	const size_t query = target.find('?');
@@ -383,7 +577,7 @@ std::string ServerManager::getPathWithoutQuery(const std::string &target) const
 	return (urlDecode(target.substr(0, query)));
 }
 
-/* Extracts the query part from a request target without the leading question mark. */
+/* Gibt den Query-String ohne führendes '?' zurück, oder einen leeren String. */
 std::string ServerManager::getQueryFromTarget(const std::string &target) const
 {
 	const size_t query = target.find('?');
@@ -392,7 +586,7 @@ std::string ServerManager::getQueryFromTarget(const std::string &target) const
 	return (target.substr(query + 1));
 }
 
-/* Maps a URL path to a static path under the server root. */
+/* Übersetzt einen URL-Pfad in einen Dateipfad unterhalb des konfigurierten Server-Roots. */
 std::string ServerManager::resolveStaticPath(const ServerConfig &server,
 	const std::string &url_path) const
 {
@@ -404,13 +598,13 @@ std::string ServerManager::resolveStaticPath(const ServerConfig &server,
 	return (server.getRoot() + clean_path);
 }
 
-/* Returns true when the URL should be handled by the configured CGI location. */
+/* Prüft, ob der URL-Pfad zu einer CGI-Location passt. */
 bool ServerManager::isCgiRequest(const ServerConfig &server, const std::string &url_path) const
 {
 	return (findCgiLocation(server, url_path) != NULL);
 }
 
-/* Finds the first CGI location matching the URL path and extension. */
+/* Findet die erste Location, deren Pfad und CGI-Endung zur Anfrage passen. */
 const Location *ServerManager::findCgiLocation(const ServerConfig &server,
 	const std::string &url_path) const
 {
@@ -432,7 +626,7 @@ const Location *ServerManager::findCgiLocation(const ServerConfig &server,
 	return (NULL);
 }
 
-/* Sends the complete response buffer, retrying short writes. */
+/* Sendet die komplette Antwort und wiederholt send(), falls nur ein Teil geschrieben wurde. */
 void ServerManager::sendAll(int client_fd, const std::string &response) const
 {
 	size_t sent = 0;

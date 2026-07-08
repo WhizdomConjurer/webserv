@@ -7,19 +7,18 @@ L_State Logger::state = ON;
 
 std::map<LogPrio, std::string> Logger::prio_str = initMap();
 
-
+/* Erstellt die Textpräfixe für spätere prioritätsbasierte Logausgaben. */
 std::map<LogPrio, std::string> Logger::initMap()
 {
     std::map<LogPrio, std::string> p_map;
 
-    // Builds the printable prefix table for future priority-based logging.
     p_map[DEBUG] = "[DEBUG]   ";
     p_map[INFO] = "[INFO]    ";
     p_map[ERROR] = "[ERROR]   ";
     return p_map;
 }
 
-/* Formats a log line and writes it either to stdout or to logs/<file_name>. */
+/* Formatiert eine Logzeile und schreibt sie entweder in die Konsole oder nach logs/<file_name>. */
 void    Logger::logMsg(const char *color, Mode m, const char* msg, ...)
 {
     char        output[8192];
@@ -62,7 +61,7 @@ void    Logger::logMsg(const char *color, Mode m, const char* msg, ...)
     }
 }
 
-/* Returns a compact timestamp used as a prefix for every log message. */
+/* Erzeugt den Zeitstempel, der jeder Logzeile vorangestellt wird. */
 std::string Logger::getCurrTime()
 {
     char date[1000];
@@ -72,25 +71,25 @@ std::string Logger::getCurrTime()
     return (std::string(date));
 }
 
-/* Sets the currently stored priority for future priority-aware logging. */
+/* Speichert die aktuelle Log-Priorität für zukünftige prioritätsbasierte Ausgaben. */
 void Logger::setPrio(LogPrio p)
 {
     Logger::prio = p;
 }
 
-/* Sets the file name used when FILE_OUTPUT logging is selected. */
+/* Setzt den Dateinamen, der bei FILE_OUTPUT verwendet wird. */
 void Logger::setFileName(const std::string &name)
 {
     Logger::file_name = name;
 }
 
-/* Backward-compatible wrapper for the old misspelled setter name. */
+/* Kompatibler Wrapper für den alten, falsch geschriebenen Setter-Namen. */
 void Logger::setFilenName(const std::string &name)
 {
     setFileName(name);
 }
 
-/* Enables or disables logger output globally. */
+/* Schaltet alle Logger-Ausgaben global ein oder aus. */
 void Logger::setState(L_State s)
 {
     Logger::state = s;
