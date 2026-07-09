@@ -618,8 +618,10 @@ const Location *ServerManager::findCgiLocation(const ServerConfig &server,
 		for (std::vector<std::string>::const_iterator ext = it->getCgiExtension().begin();
 			ext != it->getCgiExtension().end(); ++ext)
 		{
-			if (url_path.length() >= ext->length()
-				&& url_path.rfind(*ext) != std::string::npos)
+			const size_t ext_pos = url_path.find(*ext);
+			if (ext_pos != std::string::npos
+				&& (ext_pos + ext->length() == url_path.length()
+					|| url_path[ext_pos + ext->length()] == '/'))
 				return (&(*it));
 		}
 	}

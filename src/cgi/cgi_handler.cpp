@@ -212,12 +212,19 @@ void CgiHandler::initEnvCgi(HttpRequest &req, const std::vector<Location>::itera
 /* Baut die CGI/1.1-Umgebung für Endungs-Mapping, z.B. .py -> Python-Interpreter. */
 void CgiHandler::initEnv(HttpRequest &req, const std::vector<Location>::iterator it_loc)
 {
-	const size_t dot = _cgi_path.rfind('.');
-	if (dot == std::string::npos)
-		return;
-
-	const std::string extension = _cgi_path.substr(dot);
-	std::map<std::string, std::string>::iterator it_path = it_loc->_ext_path.find(extension);
+	std::map<std::string, std::string>::iterator it_path = it_loc->_ext_path.end();
+	for (std::map<std::string, std::string>::iterator it = it_loc->_ext_path.begin();
+		it != it_loc->_ext_path.end(); ++it)
+	{
+		const size_t ext_pos = _cgi_path.find(it->first);
+		if (ext_pos != std::string::npos
+			&& (ext_pos + it->first.length() == _cgi_path.length()
+				|| _cgi_path[ext_pos + it->first.length()] == '/'))
+		{
+			it_path = it;
+			break;
+		}
+	}
 	if (it_path == it_loc->_ext_path.end())
 		return;
 
@@ -240,7 +247,8 @@ void CgiHandler::initEnv(HttpRequest &req, const std::vector<Location>::iterator
 	_env["REQUEST_METHOD"] = req.getMethodStr();
 	_env["HTTP_COOKIE"] = req.getHeader("cookie");
 	_env["DOCUMENT_ROOT"] = it_loc->getRootLocation();
-	_env["REQUEST_URI"] = req.getPath() + req.getQuery();
+	_env["REQUEST_URI"] = req.getPath()
+		+ (req.getQuery().empty() ? "" : "?" + req.getQuery());
 	_env["SERVER_PROTOCOL"] = "HTTP/1.1";
 	_env["REDIRECT_STATUS"] = "200";
 	_env["SERVER_SOFTWARE"] = "webserv";

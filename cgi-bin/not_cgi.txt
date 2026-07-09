@@ -1,0 +1,1 @@
+This file intentionally has an extension that is not configured as CGI.

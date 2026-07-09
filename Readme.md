@@ -767,3 +767,98 @@ AI usage for this README:
   expectations in clearer language.
 - The team must review this README against the official subject and keep only
   content they understand and can explain during evaluation.
+
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+Core / Pflichtteil für deinen Partner
+Server-Loop final machen
+Aktuell wird nur _servers[0] genutzt und accept() blockiert nacheinander: [server_manager.cpp (line 36)](/Users/puzzlesanalytik/42Heilbronn/webserve/src/server/server_manager.cpp:36).
+Noch offen:
+mehrere server {} Blöcke unterstützen
+mehrere Ports/Listener verwalten
+alle Listener und Clients über einen zentralen poll()/select()/kqueue() Loop
+Sockets non-blocking setzen
+Clients parallel behandeln, nicht request-by-request blockierend
+
+HTTP Request Handling härten
+malformed requests korrekt mit 400
+HTTP-Version prüfen
+Header sauber validieren
+Timeouts für Clients
+client_max_body_size aus Config wirklich anwenden
+413 Payload Too Large bei zu großem Body
+
+Routen/Locations richtig anwenden
+Parser kann einiges lesen, aber Response nutzt aktuell fast nur Server-Root.
+Noch offen:
+best matching location auswählen
+pro Location root, index, methods, autoindex, return, upload anwenden
+Method-Checks für normale Routen, nicht nur CGI
+Redirects aus return wirklich ausführen
+
+Static File Serving vervollständigen
+Aktuell nur GET und einfache Datei/Index-Logik: [server_manager.cpp (line 405)](/Users/puzzlesanalytik/42Heilbronn/webserve/src/server/server_manager.cpp:405).
+Noch offen:
+403 bei forbidden files/directories
+directory handling:index vorhanden -> ausliefern
+kein index + autoindex on -> Listing generieren
+kein index + autoindex off -> 403
+
+Pfadnormalisierung gegen ../ traversal
+Custom error pages aus Config nutzen
+
+POST Upload implementieren
+In Config/Location gibt es Upload-Felder: [location.cpp (line 127)](/Users/puzzlesanalytik/42Heilbronn/webserve/src/server/location.cpp:127).
+Aber statische Requests erlauben aktuell praktisch nur GET.
+Noch offen:
+POST auf Upload-Location speichern
+upload_path/upload_store aus Config benutzen
+Statuscodes: 201, 400, 403, 413, 500
+Browser-Form/Testdatei vorbereiten
+
+DELETE implementieren
+Config erlaubt DELETE: [default.conf (line 8)](/Users/puzzlesanalytik/42Heilbronn/webserve/configs/default.conf:8).
+Aber buildStaticResponse() gibt für alles außer GET 405.
+Noch offen:
+DELETE vorhandene Datei
+fehlende Datei -> 404
+forbidden -> 403
+Erfolg -> 204 oder 200
+
+CGI Pflichtteil finalisieren
+CGI ist schon vorhanden und wirkt am weitesten, aber noch prüfen:
+CGI nur in erlaubter Location ausführen
+Extension-Mapping korrekt .py, .sh, etc.
+Query string, PATH_INFO, REQUEST_URI korrekt
+POST Body an CGI
+chunked Body wird entchunked
+CGI Timeout/Zombie cleanup
+CGI darf nicht den ganzen Server blockieren
+Einstieg: [server_manager.cpp (line 430)](/Users/puzzlesanalytik/42Heilbronn/webserve/src/server/server_manager.cpp:430)
+
+Config final validieren
+mehrere Server mit gleichem Port aber unterschiedlichem server_name
+Host Header zur Serverauswahl nutzen
+ungültige Configs sauber ablehnen
+vollständige Test-Configs für Evaluation anlegen:normal static
+redirect
+autoindex on/off
+upload
+CGI
+mehrere Server/Ports
+
+
+Pflicht-Tests schreiben/manual checklist
+curl GET /
+curl POST upload
+curl DELETE file
+CGI GET/POST/query
+großer Body -> 413
+falsche Methode -> 405
+missing file -> 404
+forbidden directory -> 403
+Browser-Test
+Stress-Test/Siege/ab oder eigener Tester
