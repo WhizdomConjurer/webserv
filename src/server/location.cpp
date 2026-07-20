@@ -24,7 +24,7 @@ Location::Location(const std::string &path)
 Location::~Location() {}
 
 /* Entfernt ein abschließendes Semikolon aus einem Config-Token. */
-std::string Location::cleanToken(const std::string &value) const
+std::string Location::cleanToken(const std::string &value)
 {
 	if (!value.empty() && value[value.length() - 1] == ';')
 		return (value.substr(0, value.length() - 1));

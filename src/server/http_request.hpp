@@ -15,13 +15,14 @@ enum HttpMethod
 class HttpRequest
 {
 	private:
-		HttpMethod							_method;
-		std::string							_method_str;
-		std::string							_path;
-		std::string							_query;
-		std::string							_body;
-		std::map<std::string, std::string>	_headers;
-
+		HttpMethod                         _method;
+		std::string                        _method_str;
+		std::string                        _path;
+		std::string                        _query;
+		std::string                        _body;
+		std::map<std::string, std::string> _headers;
+		std::string 					   _version;	
+		bool                               _valid;
 	public:
 		HttpRequest();
 		~HttpRequest();
@@ -32,6 +33,10 @@ class HttpRequest
 		void	setQuery(const std::string &query);
 		void	setBody(const std::string &body);
 		void	setHeader(const std::string &key, const std::string &value);
+		void	setValid(bool valid);
+		bool	isValid() const;
+		void	setVersion(const std::string &version);
+		const 	std::string &getVersion() const;
 
 		HttpMethod							getMethod() const;
 		const std::string					&getMethodStr() const;

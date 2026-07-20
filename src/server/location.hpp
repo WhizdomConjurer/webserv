@@ -22,7 +22,7 @@ class Location
 		std::vector<std::string>		_cgi_path;
 		std::vector<std::string>		_cgi_extension;
 
-		std::string	cleanToken(const std::string &value) const;
+		static std::string	cleanToken(const std::string &value);
 		void		parseDirective(const std::vector<std::string> &tokens, size_t &i);
 
 	public:

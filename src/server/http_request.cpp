@@ -7,7 +7,8 @@ HttpRequest::HttpRequest()
 	  _method_str("GET"),
 	  _path("/"),
 	  _query(""),
-	  _body("")
+	  _body(""),
+	  _valid(true)
 {
 }
 
@@ -67,6 +68,26 @@ void HttpRequest::setHeader(const std::string &key, const std::string &value)
 	for (std::string::iterator it = lower.begin(); it != lower.end(); ++it)
 		*it = static_cast<char>(std::tolower(static_cast<unsigned char>(*it)));
 	_headers[lower] = value;
+}
+
+void HttpRequest::setValid(bool valid)
+{
+	_valid = valid;
+}
+
+void HttpRequest::setVersion(const std::string &version)
+{
+	_version = version;
+}
+
+const std::string &HttpRequest::getVersion() const
+{
+	return (_version);
+}
+
+bool HttpRequest::isValid() const
+{
+	return (_valid);
 }
 
 /* Gibt die HTTP-Methode als enum zurück. */

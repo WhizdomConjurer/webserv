@@ -2,6 +2,7 @@
 #define LOGGER_HPP
 
 # include <cerrno>
+# include <cstdio>
 # include <cstdarg>
 # include <cstring>
 # include <ctime>

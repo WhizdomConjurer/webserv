@@ -15,6 +15,124 @@
 #include <ctime>
 #include <unistd.h>
 
+
+
+void ServerManager::setNonBlocking(int fd)
+{
+	int flags = ::fcntl(fd, F_GETFL, 0);
+	::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+void ServerManager::setupListeners()
+{
+	for (std::vector<ServerConfig>::const_iterator it = _servers.begin();
+		it != _servers.end(); ++it)
+	{
+		const int port = it->getPort();
+		bool already_listening = false;
+		for (std::map<int, std::vector<const ServerConfig *> >::iterator lit = _listeners.begin();
+			lit != _listeners.end(); ++lit)
+		{
+			if (!lit->second.empty() && lit->second.front()->getPort() == port)
+			{
+				lit->second.push_back(&(*it));
+				already_listening = true;
+				break;
+			}
+		}
+		if (already_listening)
+			continue;
+
+		const int fd = createListenSocket(port);
+		if (fd < 0)
+			continue;
+		_listeners[fd].push_back(&(*it));
+	}
+}
+
+
+void ServerManager::eventLoop()
+{
+	while (true)
+	{
+		std::vector<struct pollfd> poll_fds;
+
+		for (std::map<int, std::vector<const ServerConfig *> >::iterator it = _listeners.begin();
+			it != _listeners.end(); ++it)
+		{
+			struct pollfd pfd;
+			pfd.fd = it->first;
+			pfd.events = POLLIN;
+			pfd.revents = 0;
+			poll_fds.push_back(pfd);
+		}
+
+		for (std::map<int, ClientConnection>::iterator it = _clients.begin();
+			it != _clients.end(); ++it)
+		{
+			struct pollfd pfd;
+			pfd.fd = it->first;
+			pfd.events = (it->second.state == READING_REQUEST) ? POLLIN : POLLOUT;
+			pfd.revents = 0;
+			poll_fds.push_back(pfd);
+		}
+
+		const int ready = ::poll(&poll_fds[0], poll_fds.size(), -1);
+		if (ready < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			break;
+		}
+
+		for (size_t i = 0; i < poll_fds.size(); ++i)
+		{
+			const int fd = poll_fds[i].fd;
+			const short revents = poll_fds[i].revents;
+			if (revents == 0)
+				continue;
+
+			if (_listeners.count(fd))
+			{
+				if (revents & POLLIN)
+					acceptNewClients(fd);
+				continue;
+			}
+
+			std::map<int, ClientConnection>::iterator cit = _clients.find(fd);
+			if (cit == _clients.end())
+				continue;
+
+			if (revents & (POLLHUP | POLLERR))
+			{
+				closeClient(fd);
+				continue;
+			}
+			if (revents & POLLIN)
+				handleClientReadable(cit->second);
+			else if (revents & POLLOUT)
+				handleClientWritable(cit->second);
+		}
+	}
+}
+
+void ServerManager::acceptNewClients(int listen_fd)
+{
+	while (true)
+	{
+		const int client_fd = ::accept(listen_fd, NULL, NULL);
+		if (client_fd < 0)
+			break; // EAGAIN/EWOULDBLOCK: no more pending clients right now
+
+		setNonBlocking(client_fd);
+
+		ClientConnection client;
+		client.fd = client_fd;
+		client.server = _listeners[listen_fd].front();
+		_clients[client_fd] = client;
+	}
+}
+
 /* Erstellt einen leeren Manager; die eigentlichen ServerConfig-Objekte kommen später über setupServers(). */
 ServerManager::ServerManager()
 {
@@ -49,20 +167,13 @@ void ServerManager::runServers()
 		Logger::logMsg(RED, CONSOLE_OUTPUT, "No server config loaded");
 		return;
 	}
-
-	const ServerConfig &server = _servers[0];
-	const int listen_fd = createListenSocket(server);
-	if (listen_fd < 0)
-		return;
-
-	Logger::logMsg(YELLOW, CONSOLE_OUTPUT,
-		"Test server listening on http://localhost:%d (blocking CGI smoke-test server)",
-		server.getPort());
-	serveLoop(listen_fd, server);
+	setupListeners();
+	Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Server running (non-blocking, multi-port)");
+	eventLoop();
 }
 
 /* Erstellt einen TCP-Socket, bindet ihn an den konfigurierten Port und schaltet listen() ein. */
-int ServerManager::createListenSocket(const ServerConfig &server) const
+int ServerManager::createListenSocket(int port) const
 {
 	const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0)
@@ -78,12 +189,12 @@ int ServerManager::createListenSocket(const ServerConfig &server) const
 	std::memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(static_cast<uint16_t>(server.getPort()));
+	addr.sin_port = htons(static_cast<uint16_t>(port));
 
 	if (::bind(fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0)
 	{
 		Logger::logMsg(RED, CONSOLE_OUTPUT, "bind() failed on port %d: %s",
-			server.getPort(), std::strerror(errno));
+			port, std::strerror(errno));
 		::close(fd);
 		return (-1);
 	}
@@ -93,93 +204,112 @@ int ServerManager::createListenSocket(const ServerConfig &server) const
 		::close(fd);
 		return (-1);
 	}
+	setNonBlocking(fd);
 	return (fd);
 }
 
-/* Nimmt Clients nacheinander an; accept() blockiert hier, bis ein Client verbunden ist. */
-void ServerManager::serveLoop(int listen_fd, const ServerConfig &server)
+size_t ServerManager::extractContentLength(const std::string &headers) const
 {
-	while (true)
-	{
-		const int client_fd = ::accept(listen_fd, NULL, NULL);
-		if (client_fd < 0)
-		{
-			if (errno == EINTR)
-				continue;
-			Logger::logMsg(RED, CONSOLE_OUTPUT, "accept() failed: %s", std::strerror(errno));
-			break;
-		}
-		handleClient(client_fd, server);
-		::close(client_fd);
-	}
-	::close(listen_fd);
+	const std::string content_length = getHeaderValue(headers, "Content-Length");
+	if (content_length.empty())
+		return (0);
+	return (static_cast<size_t>(std::atol(content_length.c_str())));
 }
 
-/* Liest eine Anfrage, entscheidet zwischen CGI und statischer Datei und sendet die fertige Antwort. */
-void ServerManager::handleClient(int client_fd, const ServerConfig &server)
+void ServerManager::handleClientReadable(ClientConnection &client)
 {
-	std::string raw_request;
-	if (!readRequest(client_fd, raw_request))
+	char buffer[4096];
+	const ssize_t n = ::recv(client.fd, buffer, sizeof(buffer), 0);
+
+	if (n == 0) { closeClient(client.fd); return; }
+	if (n < 0)
 	{
-		sendAll(client_fd, buildHttpResponse(400, "text/html", getErrorPage(400)));
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return;
+		closeClient(client.fd);
 		return;
 	}
 
-	HttpRequest request = parseRequest(raw_request);
-	const std::string path = request.getPath();
-	std::string response;
-	if (isCgiRequest(server, path))
-		response = buildCgiResponse(server, request);
-	else
-		response = buildStaticResponse(server, request);
-	sendAll(client_fd, response);
+	client.in_buffer.append(buffer, static_cast<size_t>(n));
+
+	const bool complete = isRequestComplete(client);
+
+	if (client.headers_parsed
+		&& client.expected_body_len > client.server->getClientMaxBodySize())
+	{
+		client.out_buffer = buildHttpResponse(413, "text/html", getErrorPage(413));
+		client.state = WRITING_RESPONSE;
+		return;
+	}
+
+	if (client.in_buffer.size() > MAX_CONTENT_LENGTH)
+	{
+		client.out_buffer = buildHttpResponse(413, "text/html", getErrorPage(413));
+		client.state = WRITING_RESPONSE;
+		return;
+	}
+
+	if (complete)
+		processRequest(client);
 }
 
-/* Liest HTTP-Header und danach Content-Length- oder chunked-Body vollständig ein. */
-bool ServerManager::readRequest(int client_fd, std::string &raw_request) const
+bool ServerManager::isRequestComplete(ClientConnection &client) const
 {
-	char buffer[4096];
-	size_t expected_body = 0;
-
-	while (raw_request.find("\r\n\r\n") == std::string::npos)
+	if (!client.headers_parsed)
 	{
-		const ssize_t n = ::recv(client_fd, buffer, sizeof(buffer), 0);
-		if (n <= 0)
+		const size_t header_end = client.in_buffer.find("\r\n\r\n");
+		if (header_end == std::string::npos)
 			return (false);
-		raw_request.append(buffer, static_cast<size_t>(n));
-		if (raw_request.size() > MAX_CONTENT_LENGTH)
-			return (false);
+		client.header_end = header_end;
+		client.expected_body_len = extractContentLength(client.in_buffer.substr(0, header_end));
+		client.headers_parsed = true;
 	}
-
-	const size_t header_end = raw_request.find("\r\n\r\n");
-	const std::string headers = raw_request.substr(0, header_end);
-	if (hasChunkedBody(headers))
-	{
-		while (!isChunkedBodyComplete(raw_request))
-		{
-			const ssize_t n = ::recv(client_fd, buffer, sizeof(buffer), 0);
-			if (n <= 0)
-				return (false);
-			raw_request.append(buffer, static_cast<size_t>(n));
-			if (raw_request.size() > MAX_CONTENT_LENGTH)
-				return (false);
-		}
-		return (true);
-	}
-
-	const std::string content_length = getHeaderValue(headers, "Content-Length");
-	if (!content_length.empty())
-		expected_body = static_cast<size_t>(std::atol(content_length.c_str()));
-	while (raw_request.size() < header_end + 4 + expected_body)
-	{
-		const ssize_t n = ::recv(client_fd, buffer, sizeof(buffer), 0);
-		if (n <= 0)
-			return (false);
-		raw_request.append(buffer, static_cast<size_t>(n));
-	}
-	return (true);
+	return (client.in_buffer.size() >= client.header_end + 4 + client.expected_body_len);
 }
 
+void ServerManager::handleClientWritable(ClientConnection &client)
+{
+	const ssize_t n = ::send(client.fd, client.out_buffer.c_str() + client.bytes_sent,
+		client.out_buffer.size() - client.bytes_sent, 0);
+
+	if (n < 0)
+	{
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return;
+		closeClient(client.fd);
+		return;
+	}
+	client.bytes_sent += static_cast<size_t>(n);
+	if (client.bytes_sent >= client.out_buffer.size())
+		closeClient(client.fd);
+}
+
+void ServerManager::processRequest(ClientConnection &client)
+{
+	HttpRequest request = parseRequest(client.in_buffer);
+
+	if (!request.isValid())
+	{
+		client.out_buffer = buildHttpResponse(400, "text/html", getErrorPage(400));
+		client.state = WRITING_RESPONSE;
+		return;
+	}
+
+	const std::string path = request.getPath();
+
+	if (isCgiRequest(*client.server, path))
+		client.out_buffer = buildCgiResponse(*client.server, request);
+	else
+		client.out_buffer = buildStaticResponse(*client.server, request);
+
+	client.state = WRITING_RESPONSE;
+}
+
+void ServerManager::closeClient(int fd)
+{
+	::close(fd);
+	_clients.erase(fd);
+}
 /* Sucht einen Header case-insensitive in einem rohen Headerblock. */
 std::string ServerManager::getHeaderValue(const std::string &headers,
 	const std::string &name) const
@@ -267,15 +397,47 @@ std::string ServerManager::decodeChunkedBody(const std::string &body) const
 HttpRequest ServerManager::parseRequest(const std::string &raw_request) const
 {
 	HttpRequest request;
+
+	/* No CRLF at all means we never had a complete, well-formed request line. */
 	const size_t line_end = raw_request.find("\r\n");
+	if (line_end == std::string::npos)
+	{
+		request.setValid(false);
+		return (request);
+	}
+
 	const std::string request_line = raw_request.substr(0, line_end);
 	std::stringstream line(request_line);
 	std::string method;
 	std::string target;
 	std::string version;
+	std::string extra;
 
-	line >> method >> target >> version;
-	(void)version;
+	/*
+	 * Extraction must yield exactly three tokens (method, target, version)
+	 * with nothing left over -- "GARBAGE" alone, or "GET / HTTP/1.1 junk",
+	 * are both malformed, not just a request line missing a piece.
+	 */
+	if (!(line >> method >> target >> version) || (line >> extra))
+	{
+		request.setValid(false);
+		return (request);
+	}
+
+	/* Only these two versions are understood; anything else is rejected. */
+	if (version != "HTTP/1.1" && version != "HTTP/1.0")
+	{
+		request.setValid(false);
+		return (request);
+	}
+	request.setVersion(version);
+
+	if (method.empty() || target.empty() || target[0] != '/')
+	{
+		request.setValid(false);
+		return (request);
+	}
+
 	request.setMethodStr(method);
 	request.setPath(getPathWithoutQuery(target));
 	request.setQuery(getQueryFromTarget(target));
@@ -306,15 +468,13 @@ HttpRequest ServerManager::parseRequest(const std::string &raw_request) const
 		else
 			request.setBody(raw_request.substr(header_end + 4));
 	}
-	return (request);
-}
+if (request.getVersion() == "HTTP/1.1" && request.getHeader("host").empty())
+	{
+		request.setValid(false);
+		return (request);
+	}
 
-/* Schaltet einen Descriptor auf non-blocking, damit select() die CGI-Pipes steuern kann. */
-bool ServerManager::setNonBlocking(int fd) const
-{
-	if (fd < 0)
-		return (false);
-	return (::fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
+	return (request);
 }
 
 /* Bedient CGI-stdin und CGI-stdout mit select() und bricht hängende Prozesse nach Timeout ab. */
@@ -328,8 +488,8 @@ bool ServerManager::runCgiWithSelect(CgiHandler &cgi, const std::string &body,
 	bool output_open = (cgi.pipe_out[0] >= 0);
 	char buffer[4096];
 
-	if (!setNonBlocking(cgi.pipe_in[1]) || !setNonBlocking(cgi.pipe_out[0]))
-		return (false);
+	// if (!setNonBlocking(cgi.pipe_in[1]) || !setNonBlocking(cgi.pipe_out[0]))
+	// 	return (false);
 	while (input_open || output_open)
 	{
 		if (std::time(NULL) - start > timeout_seconds)
@@ -626,18 +786,4 @@ const Location *ServerManager::findCgiLocation(const ServerConfig &server,
 		}
 	}
 	return (NULL);
-}
-
-/* Sendet die komplette Antwort und wiederholt send(), falls nur ein Teil geschrieben wurde. */
-void ServerManager::sendAll(int client_fd, const std::string &response) const
-{
-	size_t sent = 0;
-	while (sent < response.length())
-	{
-		const ssize_t n = ::send(client_fd, response.c_str() + sent,
-			response.length() - sent, 0);
-		if (n <= 0)
-			return;
-		sent += static_cast<size_t>(n);
-	}
 }
