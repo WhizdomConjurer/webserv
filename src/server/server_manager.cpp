@@ -77,7 +77,7 @@ void ServerManager::eventLoop()
 			poll_fds.push_back(pfd);
 		}
 
-		const int ready = ::poll(&poll_fds[0], poll_fds.size(), -1);
+		const int ready = ::poll(&poll_fds[0], poll_fds.size(), 1000);
 		if (ready < 0)
 		{
 			if (errno == EINTR)
@@ -113,6 +113,21 @@ void ServerManager::eventLoop()
 			else if (revents & POLLOUT)
 				handleClientWritable(cit->second);
 		}
+		const time_t now = std::time(NULL);
+		std::vector<int> timed_out;
+		for (std::map<int, ClientConnection>::iterator it = _clients.begin();
+			it != _clients.end(); ++it)
+		{
+			if (now - it->second.last_activity > CONNECTION_TIMEOUT)
+				timed_out.push_back(it->first);
+		}
+		for (size_t i = 0; i < timed_out.size(); ++i)
+		{
+			Logger::logMsg(YELLOW, CONSOLE_OUTPUT,
+				"Closing client fd=%d: idle timeout (%ld seconds)",
+				timed_out[i], static_cast<long>(now - _clients[timed_out[i]].last_activity));
+			closeClient(timed_out[i]);
+		}
 	}
 }
 
@@ -129,7 +144,9 @@ void ServerManager::acceptNewClients(int listen_fd)
 		ClientConnection client;
 		client.fd = client_fd;
 		client.server = _listeners[listen_fd].front();
+		client.last_activity = std::time(NULL);
 		_clients[client_fd] = client;
+		Logger::logMsg(CYAN, CONSOLE_OUTPUT, "New client connected: fd=%d", client_fd);
 	}
 }
 
@@ -218,6 +235,7 @@ size_t ServerManager::extractContentLength(const std::string &headers) const
 
 void ServerManager::handleClientReadable(ClientConnection &client)
 {
+	client.last_activity = std::time(NULL);
 	char buffer[4096];
 	const ssize_t n = ::recv(client.fd, buffer, sizeof(buffer), 0);
 
@@ -307,6 +325,7 @@ void ServerManager::processRequest(ClientConnection &client)
 
 void ServerManager::closeClient(int fd)
 {
+	Logger::logMsg(CYAN, CONSOLE_OUTPUT, "Closing client fd=%d", fd);
 	::close(fd);
 	_clients.erase(fd);
 }

@@ -24,6 +24,7 @@ struct ClientConnection
 	bool				headers_parsed;
 	size_t				header_end;
 	size_t				expected_body_len;
+	time_t 				last_activity;
 
 	ClientConnection() : fd(-1), server(NULL), bytes_sent(0),
 		state(READING_REQUEST), headers_parsed(false), header_end(0),
