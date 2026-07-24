@@ -581,20 +581,30 @@ bool ServerManager::runCgiWithSelect(CgiHandler &cgi, const std::string &body,
 	return (true);
 }
 
-/* Sucht eine statische Datei im Document Root und baut daraus eine HTTP-Antwort. */
 std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	const HttpRequest &request) const
 {
-	if (request.getMethodStr() != "GET")
+	const Location *location = findMatchingLocation(server, request.getPath());
+	if (location)
+		std::cout << "Matched location: " << location->getPath() << std::endl;//test here need to get thrown out
+	else
+		std::cout << "No location matched\n";
+	if (!location)
+		return (buildHttpResponse(404, "text/html", getErrorPage(404)));
+
+	if (!location->acceptsMethod(request.getMethodStr()))
 		return (buildHttpResponse(405, "text/html", getErrorPage(405)));
 
-	std::string file_path = resolveStaticPath(server, request.getPath());
+	if (request.getMethodStr() != "GET")
+		return (buildHttpResponse(405, "text/html", getErrorPage(405))); // POST/DELETE not wired up yet (items 5/6)
+
+	std::string file_path = resolveStaticPath(*location, request.getPath());
 	struct stat st;
 	if (::stat(file_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
 	{
 		if (!file_path.empty() && file_path[file_path.length() - 1] != '/')
 			file_path += "/";
-		file_path += server.getIndex();
+		file_path += location->getIndexLocation();
 	}
 
 	std::ifstream file(file_path.c_str(), std::ios::in | std::ios::binary);
@@ -766,15 +776,15 @@ std::string ServerManager::getQueryFromTarget(const std::string &target) const
 }
 
 /* Übersetzt einen URL-Pfad in einen Dateipfad unterhalb des konfigurierten Server-Roots. */
-std::string ServerManager::resolveStaticPath(const ServerConfig &server,
+std::string ServerManager::resolveStaticPath(const Location &location,
 	const std::string &url_path) const
 {
 	std::string clean_path = url_path;
 	while (!clean_path.empty() && clean_path[0] == '/')
 		clean_path.erase(0, 1);
 	if (clean_path.empty())
-		clean_path = server.getIndex();
-	return (server.getRoot() + clean_path);
+		clean_path = location.getIndexLocation();
+	return (location.getRootLocation() + clean_path);
 }
 
 /* Prüft, ob der URL-Pfad zu einer CGI-Location passt. */
@@ -805,4 +815,34 @@ const Location *ServerManager::findCgiLocation(const ServerConfig &server,
 		}
 	}
 	return (NULL);
+}
+
+const Location *ServerManager::findMatchingLocation(const ServerConfig &server,
+	const std::string &url_path) const
+{
+	const std::vector<Location> &locations = server.getLocations();
+	const Location *best_match = NULL;
+	size_t best_length = 0;
+
+	for (std::vector<Location>::const_iterator it = locations.begin();
+		it != locations.end(); ++it)
+	{
+		const std::string &loc_path = it->getPath();
+
+		if (url_path.compare(0, loc_path.length(), loc_path) != 0)
+			continue; // request path doesn't start with this location's path at all
+
+		const bool exact = (url_path.length() == loc_path.length());
+		const bool boundary = (!exact && url_path[loc_path.length()] == '/');
+
+		if (!exact && !boundary)
+			continue; // e.g. "/cgi" matching "/cgi-bin/..." -- reject
+
+		if (loc_path.length() > best_length)
+		{
+			best_length = loc_path.length();
+			best_match = &(*it);
+		}
+	}
+	return (best_match);
 }
