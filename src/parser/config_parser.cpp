@@ -261,14 +261,16 @@ void ConfigParser::createServer(std::string &config, ServerConfig &server)
 		}
 		else if (parametrs[i] == "error_page" && (i + 1) < parametrs.size() && flag_loc)
 		{
+			std::vector<std::string> directive_tokens;
 			while (++i < parametrs.size())
 			{
-				error_codes.push_back(parametrs[i]);
+				directive_tokens.push_back(parametrs[i]);
 				if (parametrs[i].find(';') != std::string::npos)
 					break ;
 				if (i + 1 >= parametrs.size())
 					throw ErrorException("Wrong character out of server scope{}");
 			}
+			server.setErrorPages(directive_tokens);
 		}
 		else if (parametrs[i] == "client_max_body_size" && (i + 1) < parametrs.size() && flag_loc)
 		{
@@ -316,7 +318,6 @@ void ConfigParser::createServer(std::string &config, ServerConfig &server)
 		throw ErrorException("Location is duplicated");
 	if (!server.getPort())
 		throw ErrorException("Port not found");
-	server.setErrorPages(error_codes);
 	if (!server.isValidErrorPages())
 		throw ErrorException("Incorrect path for error page or number of error");
 }

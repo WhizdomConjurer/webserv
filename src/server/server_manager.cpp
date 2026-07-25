@@ -255,14 +255,14 @@ void ServerManager::handleClientReadable(ClientConnection &client)
 	if (client.headers_parsed
 		&& client.expected_body_len > client.server->getClientMaxBodySize())
 	{
-		client.out_buffer = buildHttpResponse(413, "text/html", getErrorPage(413));
+		client.out_buffer = buildHttpResponse(413, "text/html", getConfiguredErrorPage(413, *client.server));
 		client.state = WRITING_RESPONSE;
 		return;
 	}
 
 	if (client.in_buffer.size() > MAX_CONTENT_LENGTH)
 	{
-		client.out_buffer = buildHttpResponse(413, "text/html", getErrorPage(413));
+		client.out_buffer = buildHttpResponse(413, "text/html", getConfiguredErrorPage(413, *client.server));
 		client.state = WRITING_RESPONSE;
 		return;
 	}
@@ -308,7 +308,7 @@ void ServerManager::processRequest(ClientConnection &client)
 
 	if (!request.isValid())
 	{
-		client.out_buffer = buildHttpResponse(400, "text/html", getErrorPage(400));
+		client.out_buffer = buildHttpResponse(400, "text/html", getConfiguredErrorPage(400, *client.server));
 		client.state = WRITING_RESPONSE;
 		return;
 	}
@@ -586,36 +586,112 @@ std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 {
 	const Location *location = findMatchingLocation(server, request.getPath());
 	if (!location)
-		return (buildHttpResponse(404, "text/html", getErrorPage(404)));
+		return (buildHttpResponse(404, "text/html", getConfiguredErrorPage(404, server)));
 
 	if (isPathTraversal(request.getPath()))
-		return (buildHttpResponse(403, "text/html", getErrorPage(403)));
-	
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+
 	if (!location->getReturn().empty())
 		return (buildRedirectResponse(location->getReturn()));
 
 	if (!location->acceptsMethod(request.getMethodStr()))
-		return (buildHttpResponse(405, "text/html", getErrorPage(405)));
+		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server)));
 
 	if (request.getMethodStr() != "GET")
-		return (buildHttpResponse(405, "text/html", getErrorPage(405)));
+		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server)));
 
 	std::string file_path = resolveStaticPath(*location, request.getPath());
 	struct stat st;
-	if (::stat(file_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+
+	if (::stat(file_path.c_str(), &st) != 0)
 	{
-		if (!file_path.empty() && file_path[file_path.length() - 1] != '/')
-			file_path += "/";
-		file_path += location->getIndexLocation();
+		if (errno == EACCES)
+			return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+		return (buildHttpResponse(404, "text/html", getConfiguredErrorPage(404, server)));
 	}
+
+	if (S_ISDIR(st.st_mode))
+	{
+		std::string dir_path = file_path;
+		if (!dir_path.empty() && dir_path[dir_path.length() - 1] != '/')
+			dir_path += "/";
+
+		const std::string index_path = dir_path + location->getIndexLocation();
+		struct stat index_st;
+		if (::stat(index_path.c_str(), &index_st) == 0 && S_ISREG(index_st.st_mode))
+			file_path = index_path;
+		else if (location->getAutoindex())
+		{
+			const std::string listing = buildAutoindexPage(dir_path, request.getPath());
+			if (listing.empty())
+				return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+			return (buildHttpResponse(200, "text/html", listing));
+		}
+		else
+			return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+	}
+
+	else if (!S_ISREG(st.st_mode))
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+
+	if (::access(file_path.c_str(), R_OK) != 0)
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
 
 	std::ifstream file(file_path.c_str(), std::ios::in | std::ios::binary);
 	if (!file)
-		return (buildHttpResponse(404, "text/html", getErrorPage(404)));
+		return (buildHttpResponse(404, "text/html", getConfiguredErrorPage(404, server)));
 
 	std::stringstream body;
 	body << file.rdbuf();
 	return (buildHttpResponse(200, Mime::getType(file_path), body.str()));
+}
+
+std::string ServerManager::buildAutoindexPage(const std::string &dir_path,
+	const std::string &url_path) const
+{
+	DIR *dir = ::opendir(dir_path.c_str());
+	if (!dir)
+		return ("");
+
+	std::stringstream html;
+	html << "<html><head><title>Index of " << url_path << "</title></head>\n";
+	html << "<body><h1>Index of " << url_path << "</h1><ul>\n";
+
+	struct dirent *entry;
+	while ((entry = ::readdir(dir)) != NULL)
+	{
+		const std::string name = entry->d_name;
+		if (name == "." || name == "..")
+			continue;
+		html << "<li><a href=\"" << name << "\">" << name << "</a></li>\n";
+	}
+	::closedir(dir);
+
+	html << "</ul></body></html>\n";
+	return (html.str());
+}
+
+std::string ServerManager::getConfiguredErrorPage(short status, const ServerConfig &server) const
+{
+	const std::map<short, std::string> &pages = server.getErrorPages();
+	std::map<short, std::string>::const_iterator it = pages.find(status);
+
+	if (it != pages.end())
+	{
+		std::string custom_path = it->second;
+		while (!custom_path.empty() && custom_path[0] == '/')
+			custom_path.erase(0, 1);
+
+		std::ifstream file((server.getRoot() + custom_path).c_str(),
+			std::ios::in | std::ios::binary);
+		if (file)
+		{
+			std::stringstream body;
+			body << file.rdbuf();
+			return (body.str());
+		}
+	}
+	return (getErrorPage(status));
 }
 
 /* Startet ein konfiguriertes CGI-Skript und verpackt dessen Ausgabe als HTTP-Antwort. */
@@ -623,9 +699,9 @@ std::string ServerManager::buildCgiResponse(const ServerConfig &server, HttpRequ
 {
 	const Location *location = findCgiLocation(server, request.getPath());
 	if (!location)
-		return (buildHttpResponse(404, "text/html", getErrorPage(404)));
+		return (buildHttpResponse(404, "text/html", getConfiguredErrorPage(404, server)));
 	if (!location->acceptsMethod(request.getMethodStr()))
-		return (buildHttpResponse(405, "text/html", getErrorPage(405)));
+		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server)));
 
 	std::string script_path = request.getPath();
 	if (script_path.find("/cgi-bin/") == 0)
@@ -639,20 +715,20 @@ std::string ServerManager::buildCgiResponse(const ServerConfig &server, HttpRequ
 	cgi.initEnv(request, it);
 	cgi.execute(error);
 	if (error)
-		return (buildHttpResponse(error, "text/html", getErrorPage(error)));
+		return (buildHttpResponse(error, "text/html", getConfiguredErrorPage(error, server)));
 
 	std::string cgi_output;
 	if (!runCgiWithSelect(cgi, request.getBody(), cgi_output))
 	{
 		int status = 0;
 		::waitpid(cgi.getCgiPid(), &status, 0);
-		return (buildHttpResponse(504, "text/html", getErrorPage(504)));
+		return (buildHttpResponse(504, "text/html", getConfiguredErrorPage(504, server)));
 	}
 
 	int status = 0;
 	::waitpid(cgi.getCgiPid(), &status, 0);
 	if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-		return (buildHttpResponse(502, "text/html", getErrorPage(502)));
+		return (buildHttpResponse(502, "text/html", getConfiguredErrorPage(502, server)));
 	if (!cgi_output.empty() && cgi_output.find("HTTP/1.1") == 0)
 		return (cgi_output);
 	return (normalizeCgiOutput(cgi_output));

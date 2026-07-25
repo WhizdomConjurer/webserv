@@ -76,6 +76,8 @@ class ServerManager
 		const Location	*findCgiLocation(const ServerConfig &server, const std::string &url_path) const;
 		const Location *findMatchingLocation(const ServerConfig &server,const std::string &url_path) const;
 		void		sendAll(int client_fd, const std::string &response) const;
+		std::string buildAutoindexPage(const std::string &dir_path, const std::string &url_path) const;
+		std::string getConfiguredErrorPage(short status, const ServerConfig &server) const;
 
 	public:
 		ServerManager();
