@@ -72,6 +72,7 @@ class ServerManager
 		std::string	getQueryFromTarget(const std::string &target) const;
 		std::string resolveStaticPath(const Location &location,const std::string &url_path) const;
 		bool		isCgiRequest(const ServerConfig &server, const std::string &url_path) const;
+		bool 		isPathTraversal(const std::string &url_path) const;
 		const Location	*findCgiLocation(const ServerConfig &server, const std::string &url_path) const;
 		const Location *findMatchingLocation(const ServerConfig &server,const std::string &url_path) const;
 		void		sendAll(int client_fd, const std::string &response) const;

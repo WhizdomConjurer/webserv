@@ -585,18 +585,20 @@ std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	const HttpRequest &request) const
 {
 	const Location *location = findMatchingLocation(server, request.getPath());
-	if (location)
-		std::cout << "Matched location: " << location->getPath() << std::endl;//test here need to get thrown out
-	else
-		std::cout << "No location matched\n";
 	if (!location)
 		return (buildHttpResponse(404, "text/html", getErrorPage(404)));
+
+	if (isPathTraversal(request.getPath()))
+		return (buildHttpResponse(403, "text/html", getErrorPage(403)));
+	
+	if (!location->getReturn().empty())
+		return (buildRedirectResponse(location->getReturn()));
 
 	if (!location->acceptsMethod(request.getMethodStr()))
 		return (buildHttpResponse(405, "text/html", getErrorPage(405)));
 
 	if (request.getMethodStr() != "GET")
-		return (buildHttpResponse(405, "text/html", getErrorPage(405))); // POST/DELETE not wired up yet (items 5/6)
+		return (buildHttpResponse(405, "text/html", getErrorPage(405)));
 
 	std::string file_path = resolveStaticPath(*location, request.getPath());
 	struct stat st;
@@ -779,12 +781,19 @@ std::string ServerManager::getQueryFromTarget(const std::string &target) const
 std::string ServerManager::resolveStaticPath(const Location &location,
 	const std::string &url_path) const
 {
-	std::string clean_path = url_path;
-	while (!clean_path.empty() && clean_path[0] == '/')
-		clean_path.erase(0, 1);
-	if (clean_path.empty())
-		clean_path = location.getIndexLocation();
-	return (location.getRootLocation() + clean_path);
+	std::string relative_path = url_path;
+	const std::string &loc_path = location.getPath();
+
+	if (relative_path.compare(0, loc_path.length(), loc_path) == 0)
+		relative_path.erase(0, loc_path.length());
+
+	while (!relative_path.empty() && relative_path[0] == '/')
+		relative_path.erase(0, 1);
+
+	if (relative_path.empty())
+		relative_path = location.getIndexLocation();
+
+	return (location.getRootLocation() + relative_path);
 }
 
 /* Prüft, ob der URL-Pfad zu einer CGI-Location passt. */
@@ -833,8 +842,8 @@ const Location *ServerManager::findMatchingLocation(const ServerConfig &server,
 			continue; // request path doesn't start with this location's path at all
 
 		const bool exact = (url_path.length() == loc_path.length());
-		const bool boundary = (!exact && url_path[loc_path.length()] == '/');
-
+		const bool boundary = !exact && (loc_path[loc_path.length() - 1] == '/' || url_path[loc_path.length()] == '/');
+		
 		if (!exact && !boundary)
 			continue; // e.g. "/cgi" matching "/cgi-bin/..." -- reject
 
@@ -845,4 +854,21 @@ const Location *ServerManager::findMatchingLocation(const ServerConfig &server,
 		}
 	}
 	return (best_match);
+}
+
+bool ServerManager::isPathTraversal(const std::string &url_path) const
+{
+	size_t pos = 0;
+	while (pos < url_path.length())
+	{
+		const size_t next = url_path.find('/', pos);
+		const std::string segment = url_path.substr(pos,
+			(next == std::string::npos ? url_path.length() : next) - pos);
+		if (segment == "..")
+			return (true);
+		if (next == std::string::npos)
+			break;
+		pos = next + 1;
+	}
+	return (false);
 }
