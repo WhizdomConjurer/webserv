@@ -581,6 +581,39 @@ bool ServerManager::runCgiWithSelect(CgiHandler &cgi, const std::string &body,
 	return (true);
 }
 
+std::string ServerManager::buildUploadResponse(const ServerConfig &server,
+	const Location &location, const HttpRequest &request) const
+{
+	if (!location.getUploadEnabled())
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+
+	std::string filename = request.getPath();
+	const size_t last_slash = filename.find_last_of('/');
+	if (last_slash != std::string::npos)
+		filename = filename.substr(last_slash + 1);
+
+	if (filename.empty() || isPathTraversal(request.getPath()))
+		return (buildHttpResponse(400, "text/html", getConfiguredErrorPage(400, server)));
+
+	std::string upload_dir = location.getUploadPath();
+	if (!upload_dir.empty() && upload_dir[upload_dir.length() - 1] != '/')
+		upload_dir += "/";
+
+	const std::string full_path = upload_dir + filename;
+
+	std::ofstream file(full_path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+	if (!file)
+		return (buildHttpResponse(500, "text/html", getConfiguredErrorPage(500, server)));
+
+	file << request.getBody();
+	file.close();
+
+	if (file.fail())
+		return (buildHttpResponse(500, "text/html", getConfiguredErrorPage(500, server)));
+
+	return (buildHttpResponse(201, "text/plain", "Upload successful: " + filename + "\n"));
+}
+
 std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	const HttpRequest &request) const
 {
@@ -597,9 +630,12 @@ std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	if (!location->acceptsMethod(request.getMethodStr()))
 		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server)));
 
-	if (request.getMethodStr() != "GET")
-		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server)));
+	if (request.getMethodStr() == "POST")
+		return (buildUploadResponse(server, *location, request));
 
+	if (request.getMethodStr() != "GET")
+		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server))); // DELETE: item 6
+		
 	std::string file_path = resolveStaticPath(*location, request.getPath());
 	struct stat st;
 
