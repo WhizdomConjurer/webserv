@@ -79,6 +79,7 @@ class ServerManager
 		std::string buildAutoindexPage(const std::string &dir_path, const std::string &url_path) const;
 		std::string getConfiguredErrorPage(short status, const ServerConfig &server) const;
 		std::string buildUploadResponse(const ServerConfig &server,const Location &location, const HttpRequest &request) const;
+		std::string buildDeleteResponse(const ServerConfig &server,const Location &location, const HttpRequest &request) const;
 
 	public:
 		ServerManager();

@@ -614,6 +614,27 @@ std::string ServerManager::buildUploadResponse(const ServerConfig &server,
 	return (buildHttpResponse(201, "text/plain", "Upload successful: " + filename + "\n"));
 }
 
+std::string ServerManager::buildDeleteResponse(const ServerConfig &server,
+	const Location &location, const HttpRequest &request) const
+{
+	if (isPathTraversal(request.getPath()))
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+
+	const std::string file_path = resolveStaticPath(location, request.getPath());
+	struct stat st;
+
+	if (::stat(file_path.c_str(), &st) != 0)
+		return (buildHttpResponse(404, "text/html", getConfiguredErrorPage(404, server)));
+
+	if (!S_ISREG(st.st_mode))
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+
+	if (::remove(file_path.c_str()) != 0)
+		return (buildHttpResponse(403, "text/html", getConfiguredErrorPage(403, server)));
+
+	return (buildHttpResponse(204, "text/plain", ""));
+}
+
 std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	const HttpRequest &request) const
 {
@@ -633,9 +654,12 @@ std::string ServerManager::buildStaticResponse(const ServerConfig &server,
 	if (request.getMethodStr() == "POST")
 		return (buildUploadResponse(server, *location, request));
 
+	if (request.getMethodStr() == "DELETE")
+		return (buildDeleteResponse(server, *location, request));
+
 	if (request.getMethodStr() != "GET")
-		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server))); // DELETE: item 6
-		
+		return (buildHttpResponse(405, "text/html", getConfiguredErrorPage(405, server)));
+
 	std::string file_path = resolveStaticPath(*location, request.getPath());
 	struct stat st;
 
