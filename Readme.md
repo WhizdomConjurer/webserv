@@ -862,3 +862,48 @@ missing file -> 404
 forbidden directory -> 403
 Browser-Test
 Stress-Test/Siege/ab oder eigener Tester
+
+
+
+--------------------------------------------------------------------------------
+
+
+
+
+Priorisierte Restaufgaben
+
+Priorität 0 – vor jeder Evaluation
+CGI vollständig in den zentralen Poll-Loop integrieren.
+CGI-Pipes non-blocking machen.
+Blockierendes select() und waitpid(..., 0) entfernen.
+errno-/fcntl-/Funktionsliste exakt Subject-konform machen.
+HTTP-Header und Content-Length strikt validieren.
+Chunked Request Completion und CGI-Länge reparieren.
+CGI-Skriptpfad und PATH_INFO sauber trennen.
+
+
+Priorität 1 – Pflichtteilfunktionalität
+Autoindex reparieren.
+host beim Socket-Binding berücksichtigen.
+Verhalten bei komplett fehlgeschlagenen Listenern korrigieren.
+Half-Close/POLLHUP korrekt behandeln.
+fehlendes CGI-Skript mit 404 beantworten.
+Upload mit Binärdateien, Browserformular und Chunked testen.
+längeren Stress-, Slow-Client- und Leak-Test ergänzen.
+
+
+Priorität 2 – Evaluation und Dokumentation
+Readme.md zu README.md umbenennen.
+echte Logins eintragen.
+deutschen/veralteten Abschnitt entfernen.
+Startseite nicht mehr als „temporary blocking test server“ bezeichnen.
+Bonus-Test für falsche Extension korrigieren.
+portable Demo- und Evaluation-Anleitung erstellen.
+Abschließende Antwort
+Ist der Pflichtteil fertig? Nein.
+Funktionieren viele Kernfeatures? Ja.
+Funktioniert Upload und DELETE? Ja, in den getesteten Grundfällen.
+Ist der Bonus funktional vorhanden? Ja, weitgehend.
+Wird der Bonus aktuell bewertet? Nein, weil der Pflichtteil noch kritische Probleme hat.
+Ist das Projekt abgabefertig? Nein.
+Das Repository wurde durch den Audit nicht dauerhaft verändert. Alle temporären Testdateien, Uploads, Sessions und Buildänderungen wurden entfernt; der Git-Status ist sauber.
