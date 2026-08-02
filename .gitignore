@@ -1,0 +1,4 @@
+/obj/
+/webserv
+*.log
+/cgi-bin/bonus_sessions/

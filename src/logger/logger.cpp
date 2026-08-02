@@ -1,4 +1,5 @@
 #include "logger.hpp"
+#include <fstream>
 
 
 std::string Logger::file_name = "logfile.txt";
@@ -37,22 +38,11 @@ void    Logger::logMsg(const char *color, Mode m, const char* msg, ...)
         std::string date = getCurrTime();
         if (m == FILE_OUTPUT)
         {
-            if (mkdir("logs", 0777) < 0 && errno != EEXIST)
-            {
-                std::cerr << "mkdir() Error: " << strerror(errno) << std::endl;
-                return ;
-            }
-            int fd = open(("logs/" + file_name).c_str(), O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR);
-            if (fd < 0)
-            {
-                std::cerr << "open() Error: " << strerror(errno) << std::endl;
-                return ;
-            }
-            write(fd, date.c_str(), date.length());
-            write(fd, "   ", 3);
-            write(fd, output, n);
-            write(fd, "\n", 1);
-            close(fd);
+			std::ofstream file(file_name.c_str(), std::ios::out | std::ios::app);
+			if (!file)
+				return ;
+			file << date << "   "
+				<< std::string(output, static_cast<size_t>(n)) << "\n";
         }
         else if (m == CONSOLE_OUTPUT)
         {

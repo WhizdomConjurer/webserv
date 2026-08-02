@@ -20,6 +20,7 @@ class CgiHandler
 		void	buildArgvArray(const std::string &exec_path);
 		void	freeEnvArray();
 		void	freeArgvArray();
+		char	*duplicateString(const std::string &value) const;
 		void	closeFd(int &fd);
 		void	addRequestHeaders(HttpRequest &req);
 

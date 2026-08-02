@@ -93,22 +93,28 @@ const std::string &CgiHandler::getCgiPath() const
 	return (_cgi_path);
 }
 
+/* Erstellt eine C++-verwaltete, nullterminierte Kopie für execve()-Arrays. */
+char *CgiHandler::duplicateString(const std::string &value) const
+{
+	char *copy = new char[value.length() + 1];
+	std::memcpy(copy, value.c_str(), value.length() + 1);
+	return (copy);
+}
+
 /* Wandelt die Environment-Map in ein NULL-terminiertes char** um, wie execve() es erwartet. */
 void CgiHandler::buildEnvArray()
 {
 	freeEnvArray();
-	_ch_env = static_cast<char **>(std::calloc(_env.size() + 1, sizeof(char *)));
-	if (!_ch_env)
-		throw std::bad_alloc();
+	_ch_env = new char *[_env.size() + 1];
+	for (size_t i = 0; i <= _env.size(); ++i)
+		_ch_env[i] = NULL;
 
 	size_t index = 0;
 	for (std::map<std::string, std::string>::const_iterator it = _env.begin();
 		it != _env.end(); ++it)
 	{
 		const std::string entry = it->first + "=" + it->second;
-		_ch_env[index] = ::strdup(entry.c_str());
-		if (!_ch_env[index])
-			throw std::bad_alloc();
+		_ch_env[index] = duplicateString(entry);
 		++index;
 	}
 }
@@ -117,13 +123,12 @@ void CgiHandler::buildEnvArray()
 void CgiHandler::buildArgvArray(const std::string &exec_path)
 {
 	freeArgvArray();
-	_argv = static_cast<char **>(std::calloc(3, sizeof(char *)));
-	if (!_argv)
-		throw std::bad_alloc();
-	_argv[0] = ::strdup(exec_path.c_str());
-	_argv[1] = ::strdup(_cgi_path.c_str());
-	if (!_argv[0] || !_argv[1])
-		throw std::bad_alloc();
+	_argv = new char *[3];
+	_argv[0] = NULL;
+	_argv[1] = NULL;
+	_argv[2] = NULL;
+	_argv[0] = duplicateString(exec_path);
+	_argv[1] = duplicateString(_cgi_path);
 }
 
 /* Gibt das aktuell für execve() gebaute Environment-Array frei. */
@@ -132,8 +137,8 @@ void CgiHandler::freeEnvArray()
 	if (!_ch_env)
 		return;
 	for (size_t i = 0; _ch_env[i]; ++i)
-		std::free(_ch_env[i]);
-	std::free(_ch_env);
+		delete [] _ch_env[i];
+	delete [] _ch_env;
 	_ch_env = NULL;
 }
 
@@ -143,8 +148,8 @@ void CgiHandler::freeArgvArray()
 	if (!_argv)
 		return;
 	for (size_t i = 0; _argv[i]; ++i)
-		std::free(_argv[i]);
-	std::free(_argv);
+		delete [] _argv[i];
+	delete [] _argv;
 	_argv = NULL;
 }
 
@@ -182,9 +187,6 @@ void CgiHandler::initEnvCgi(HttpRequest &req, const std::vector<Location>::itera
 		return;
 
 	const std::string cgi_exec = "cgi-bin/" + it_loc->getCgiPath()[0];
-	char cwd_buffer[4096];
-	if (_cgi_path[0] != '/' && ::getcwd(cwd_buffer, sizeof(cwd_buffer)))
-		_cgi_path = std::string(cwd_buffer) + "/" + _cgi_path;
 
 	if (req.getMethod() == POST)
 	{
@@ -230,16 +232,29 @@ void CgiHandler::initEnv(HttpRequest &req, const std::vector<Location>::iterator
 
 	const int host_sep = findStart(req.getHeader("host"), ":");
 	std::string query = req.getQuery();
+	std::string script_name = req.getPath();
+	for (std::vector<std::string>::const_iterator ext = it_loc->getCgiExtension().begin();
+		ext != it_loc->getCgiExtension().end(); ++ext)
+	{
+		const size_t pos = script_name.find(*ext);
+		if (pos != std::string::npos)
+		{
+			script_name.erase(pos + ext->length());
+			break;
+		}
+	}
+	const std::string path_info = getPathInfo(req.getPath(), it_loc->getCgiExtension());
+	std::string translated_info = path_info;
+	while (!translated_info.empty() && translated_info[0] == '/')
+		translated_info.erase(0, 1);
 
-	_env["AUTH_TYPE"] = "Basic";
 	_env["CONTENT_LENGTH"] = req.getHeader("content-length");
 	_env["CONTENT_TYPE"] = req.getHeader("content-type");
 	_env["GATEWAY_INTERFACE"] = "CGI/1.1";
-	_env["SCRIPT_NAME"] = _cgi_path;
+	_env["SCRIPT_NAME"] = script_name;
 	_env["SCRIPT_FILENAME"] = _cgi_path;
-	_env["PATH_INFO"] = getPathInfo(req.getPath(), it_loc->getCgiExtension());
-	_env["PATH_TRANSLATED"] = it_loc->getRootLocation()
-		+ (_env["PATH_INFO"].empty() ? "/" : _env["PATH_INFO"]);
+	_env["PATH_INFO"] = path_info;
+	_env["PATH_TRANSLATED"] = it_loc->getRootLocation() + translated_info;
 	_env["QUERY_STRING"] = decode(query);
 	_env["REMOTE_ADDR"] = req.getHeader("host");
 	_env["SERVER_NAME"] = (host_sep > 0 ? req.getHeader("host").substr(0, host_sep) : req.getHeader("host"));
@@ -249,7 +264,7 @@ void CgiHandler::initEnv(HttpRequest &req, const std::vector<Location>::iterator
 	_env["DOCUMENT_ROOT"] = it_loc->getRootLocation();
 	_env["REQUEST_URI"] = req.getPath()
 		+ (req.getQuery().empty() ? "" : "?" + req.getQuery());
-	_env["SERVER_PROTOCOL"] = "HTTP/1.1";
+	_env["SERVER_PROTOCOL"] = req.getVersion();
 	_env["REDIRECT_STATUS"] = "200";
 	_env["SERVER_SOFTWARE"] = "webserv";
 	addRequestHeaders(req);
@@ -298,10 +313,8 @@ void CgiHandler::execute(short &error_code)
 			if (!dir.empty())
 				::chdir(dir.c_str());
 		}
-		std::free(_argv[1]);
-		_argv[1] = ::strdup(script_arg.c_str());
-		if (!_argv[1])
-			std::exit(127);
+		delete [] _argv[1];
+		_argv[1] = duplicateString(script_arg);
 		::dup2(pipe_in[0], STDIN_FILENO);
 		::dup2(pipe_out[1], STDOUT_FILENO);
 		closeFd(pipe_in[0]);

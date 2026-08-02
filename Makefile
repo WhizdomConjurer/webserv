@@ -22,21 +22,8 @@ OBJ_DIR := obj
 OBJ := $(SRC:%.cpp=$(OBJ_DIR)/%.o)
 DEP := $(OBJ:.o=.d)
 
-# Subject / integration checklist
-# ✅ Makefile exists and defines NAME, all, clean, fclean, re.
-# ✅ Build uses c++ with -Wall -Wextra -Werror and -std=c++98.
-# ✅ Current CGI files have been split correctly into .hpp declarations and .cpp definitions.
-# ✅ Logger, parser, main, utils, and CGI functions now have function-level comments.
-# ✅ CGI handler no longer shallow-copies owned char ** arrays.
-# ✅ CGI handler closes owned pipe descriptors during cleanup.
-# ✅ Obvious include-path typos from ../inc/... were corrected for the current tree.
-# ✅ Dummy server modules exist for ServerManager, ServerConfig, Location, HttpRequest, and Mime.
-# ✅ These dummy modules let parser/logger/CGI integration compile and run basic smoke tests.
-# ⚠️ Dummy modules are placeholders and must be replaced by the real team implementations.
-# ⚠️ Real ServerManager must create sockets, set O_NONBLOCK, and drive all socket/pipe I/O with one poll-equivalent loop.
-# ⚠️ Real HttpRequest must parse raw HTTP bytes, headers, body, chunked input, malformed requests, and timeouts.
-# ⚠️ Real ServerConfig/Location must validate the complete subject configuration behavior.
-# ⚠️ Real Mime must provide the final MIME table used by static responses.
+# Portable C++98 build used on both Linux and macOS. Header dependencies are
+# generated with -MMD -MP so changing a header rebuilds the affected objects.
 
 all: $(NAME)
 
@@ -67,6 +54,9 @@ test-bonus: re
 test-quick: re
 	$(WEBSERV_PYTHON) tests/evaluation_suite.py --quick
 
-.PHONY: all clean fclean re test-eval test-core test-bonus test-quick
+test-siege: re
+	sh tests/siege_stress.sh
+
+.PHONY: all clean fclean re test-eval test-core test-bonus test-quick test-siege
 
 -include $(DEP)

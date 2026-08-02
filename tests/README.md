@@ -31,6 +31,12 @@ Run a shorter development loop without the CGI timeout and concurrency checks:
 make test-quick
 ```
 
+Run the Linux Siege availability and RSS-memory check after installing Siege:
+
+```sh
+make test-siege
+```
+
 Individual sections can also be selected after building:
 
 ```sh

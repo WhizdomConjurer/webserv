@@ -1,0 +1,6 @@
+FROM gcc:13-bookworm
+
+WORKDIR /webserv
+COPY . .
+
+RUN make re

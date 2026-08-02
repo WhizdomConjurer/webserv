@@ -38,7 +38,6 @@
 /* Network */
 # include <sys/socket.h>
 # include <netinet/in.h>
-# include <sys/select.h>
 # include <arpa/inet.h>
 
 # include "parser/config_parser.hpp"
@@ -73,6 +72,7 @@ std::string toString(const T val)
 
 std::string statusCodeString(short);
 std::string getErrorPage(short);
+bool removeRegularFile(const std::string &path);
 int buildHtmlIndex(std::string &, std::vector<uint8_t> &, size_t &);
 int ft_stoi(std::string str);
 unsigned int fromHexToDec(const std::string& nb);

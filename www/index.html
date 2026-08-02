@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>webserv CGI smoke tests</title>
+	<title>webserv evaluation dashboard</title>
 	<style>
 		body {
 			font-family: Arial, sans-serif;
@@ -37,11 +37,30 @@
 	</style>
 </head>
 <body>
-	<h1>webserv CGI smoke tests</h1>
+	<h1>webserv evaluation dashboard</h1>
 	<p>
-		This page is served by the temporary blocking test server.
-		It exists so the CGI part can be tested in a browser before the final team server is ready.
+		This static page is served by the central non-blocking poll loop.
+		The links and forms below provide browser-accessible checks for mandatory
+		HTTP and CGI behavior.
 	</p>
+
+	<section>
+		<h2>Mandatory HTTP features</h2>
+		<p>
+			The server supports static files, route-specific methods, redirects,
+			autoindex, binary uploads, DELETE, custom error pages, multiple
+			listeners, body-size limits, and non-blocking CGI execution.
+		</p>
+		<form action="/upload/browser-demo.txt" method="post" enctype="text/plain">
+			<label for="upload-content">Upload test content</label>
+			<input id="upload-content" name="content" value="hello from browser">
+			<button type="submit">Upload browser-demo.txt</button>
+		</form>
+		<p>
+			The uploaded file can be removed with
+			<code>curl -X DELETE http://127.0.0.1:8080/upload/browser-demo.txt</code>.
+		</p>
+	</section>
 
 	<section>
 		<h2>Bonus Demo</h2>

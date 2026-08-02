@@ -231,6 +231,11 @@ def run_source_checks():
         manager, re.DOTALL
     ) is not None
     BOOK.check("no errno-based control after socket/pipe I/O", not errno_after_io, errno_after_io, False)
+    cgi_write_start = manager.find("void ServerManager::handleCgiInputWritable")
+    cgi_write_end = manager.find("void ServerManager::handleCgiOutputReadable", cgi_write_start)
+    cgi_write = manager[cgi_write_start:cgi_write_end]
+    BOOK.check("CGI pipe write checks zero and negative results", "if (n <= 0)" in cgi_write,
+               "if (n <= 0)" in cgi_write, True)
 
 
 def invalid_config_rejected(path):
@@ -256,6 +261,7 @@ def run_config_checks():
         ("missing listen directive", "tests/configs/invalid/missing_listen.conf"),
         ("unknown directive", "tests/configs/invalid/unknown_directive.conf"),
         ("duplicate location", "tests/configs/invalid/duplicate_location.conf"),
+        ("duplicate listen identity", "tests/configs/invalid/duplicate_server.conf"),
         ("invalid error-page status", "tests/configs/invalid/invalid_error_status.conf"),
         ("unclosed scope", "tests/configs/invalid/unclosed_scope.conf"),
     ]
@@ -288,6 +294,33 @@ def run_default_core_checks(quick):
         BOOK.check("HTTP/1.0 request works", http10.status == 200, http10.status, 200)
         malformed = raw_request("127.0.0.1", 8080, b"GET / HTTP/1.1\r\nHost: x\r\nBroken-Header\r\n\r\n")
         BOOK.check("malformed header line returns 400", malformed.status == 400, malformed.status, 400)
+        unsupported_version = raw_request(
+            "127.0.0.1", 8080, b"GET / HTTP/9.9\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        )
+        BOOK.check("unsupported HTTP version returns 505", unsupported_version.status == 505,
+                   unsupported_version.status, 505)
+
+        default_upload = os.path.join(ROOT, "uploads/evaluation_roundtrip.bin")
+        try:
+            os.unlink(default_upload)
+        except OSError:
+            pass
+        roundtrip_body = b"roundtrip\x00binary\xffbody"
+        roundtrip_post = http_request(8080, "POST", "/upload/evaluation_roundtrip.bin",
+                                      {"Content-Type": "application/octet-stream"}, roundtrip_body)
+        roundtrip_get = http_request(8080, "GET", "/upload/evaluation_roundtrip.bin")
+        roundtrip_delete = http_request(8080, "DELETE", "/upload/evaluation_roundtrip.bin")
+        BOOK.check("default upload route accepts POST", roundtrip_post.status == 201,
+                   roundtrip_post.status, 201)
+        BOOK.check("uploaded file can be retrieved byte-exactly",
+                   roundtrip_get.status == 200 and roundtrip_get.body == roundtrip_body,
+                   (roundtrip_get.status, roundtrip_get.body), (200, roundtrip_body))
+        BOOK.check("default upload route accepts DELETE", roundtrip_delete.status == 204,
+                   roundtrip_delete.status, 204)
+        try:
+            os.unlink(default_upload)
+        except OSError:
+            pass
 
         invalid_upload = os.path.join(ROOT, "uploads/evaluation_invalid_length.txt")
         try:
@@ -509,6 +542,11 @@ def run_cgi_checks(quick):
                    path_json.get("path_info") if path_json else None, "/extra/path")
         missing = http_request(18084, "GET", "/cgi-bin/evaluation-does-not-exist.py")
         BOOK.check("missing CGI script returns 404", missing.status == 404, missing.status, 404)
+        failed = http_request(18084, "GET", "/cgi-bin/evaluation_error.py")
+        BOOK.check("failing CGI returns 502", failed.status == 502, failed.status, 502)
+        alive_after_error = http_request(18084, "GET", "/")
+        BOOK.check("server survives failing CGI", alive_after_error.status == 200,
+                   alive_after_error.status, 200)
         wrong_extension = http_request(18084, "GET", "/cgi-bin/not_cgi.txt")
         BOOK.check("non-CGI extension is served statically", wrong_extension.status == 200 and b"not configured as CGI" in wrong_extension.body,
                    (wrong_extension.status, b"not configured as CGI" in wrong_extension.body), (200, True))

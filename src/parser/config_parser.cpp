@@ -348,7 +348,9 @@ void ConfigParser::checkServers()
 	{
 		for (it2 = it1 + 1; it2 != this->_servers.end(); it2++)
 		{
-			if (it1->getPort() == it2->getPort() && it1->getHost() == it2->getHost() && it1->getServerName() == it2->getServerName())
+			if (it1->getPort() == it2->getPort()
+				&& it1->getHostString() == it2->getHostString()
+				&& it1->getServerName() == it2->getServerName())
 				throw ErrorException("Failed server validation");
 		}
 	}

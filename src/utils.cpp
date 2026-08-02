@@ -1,5 +1,11 @@
 #include "webserv.hpp"
 
+/* Löscht eine Ressource über die C++-Standardbibliothek. */
+bool removeRegularFile(const std::string &path)
+{
+	return (std::remove(path.c_str()) == 0);
+}
+
 /* Wandelt einen Dezimalstring in int um und lehnt Nicht-Ziffern oder zu lange Werte ab. */
 int ft_stoi(std::string str)
 {
@@ -54,7 +60,7 @@ std::string statusCodeString(short statusCode)
         case 301:
             return "Moved Permanently";
         case 302:
-            return "Moved Temporarily";
+            return "Found";
         case 303:
             return "See Other";
         case 304:
@@ -88,7 +94,7 @@ std::string statusCodeString(short statusCode)
         case 412:
             return "Precondition Failed";
         case 413:
-            return "Payload Too Large";
+            return "Content Too Large";
         case 414:
             return "URI Too Long";
         case 415:
