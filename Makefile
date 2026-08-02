@@ -3,6 +3,7 @@ NAME := webserv
 CXX := c++
 CXXFLAGS := -Wall -Wextra -Werror -std=c++98
 CPPFLAGS := -Isrc -Isrc/cgi -Isrc/logger -Isrc/parser -Isrc/server
+WEBSERV_PYTHON ?= python3
 
 SRC := \
 	src/main.cpp \
@@ -54,6 +55,18 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all clean fclean re
+test-eval: re
+	$(WEBSERV_PYTHON) tests/evaluation_suite.py
+
+test-core: re
+	$(WEBSERV_PYTHON) tests/evaluation_suite.py --section source --section config --section core --section cgi
+
+test-bonus: re
+	$(WEBSERV_PYTHON) tests/evaluation_suite.py --section bonus
+
+test-quick: re
+	$(WEBSERV_PYTHON) tests/evaluation_suite.py --quick
+
+.PHONY: all clean fclean re test-eval test-core test-bonus test-quick
 
 -include $(DEP)

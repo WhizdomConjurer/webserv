@@ -907,3 +907,241 @@ Ist der Bonus funktional vorhanden? Ja, weitgehend.
 Wird der Bonus aktuell bewertet? Nein, weil der Pflichtteil noch kritische Probleme hat.
 Ist das Projekt abgabefertig? Nein.
 Das Repository wurde durch den Audit nicht dauerhaft verändert. Alle temporären Testdateien, Uploads, Sessions und Buildänderungen wurden entfernt; der Git-Status ist sauber.
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Tests:
+
+
+1. Server bauen und starten
+Terminal 1:
+cd /Users/puzzlesanalytik/42Heilbronn/webserve
+make re
+./webserv configs/default.conf
+Der Server muss danach weiterlaufen. Beenden kannst du ihn später mit Ctrl+C.
+Falls Port 8080 belegt ist:
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+2. Website im Browser öffnen
+Auf dem Mac:
+open http://localhost:8080/
+Oder im Browser eingeben:
+http://localhost:8080/
+Folgende Seiten kannst du direkt zeigen:
+Startseite: http://localhost:8080/
+Bonus-Demo: http://localhost:8080/bonus.html
+Python-CGI: http://localhost:8080/cgi-bin/bonus_python.py?source=browser
+Shell-CGI: http://localhost:8080/cgi-bin/bonus_shell.sh?source=browser
+Session: http://localhost:8080/cgi-bin/bonus_session.py
+Bei der Session-Seite mehrfach neu laden. Der Counter sollte von 1 auf 2, 3 usw. steigen.
+3. Normale HTTP-Funktionen zeigen
+In Terminal 2:
+Startseite
+curl -i http://localhost:8080/
+Erwartet:
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: ...
+Fehlerseite
+curl -i http://localhost:8080/datei-gibt-es-nicht
+Erwartet:
+HTTP/1.1 404 Not Found
+Dabei sollte die konfigurierte 404-Seite zurückkommen.
+Nicht erlaubte Methode
+curl -i -X PUT http://localhost:8080/
+Erwartet:
+HTTP/1.1 405 Method Not Allowed
+Path Traversal
+curl -i 'http://localhost:8080/%2e%2e/Makefile'
+Erwartet:
+HTTP/1.1 403 Forbidden
+HTTP/1.0
+curl -i --http1.0 http://localhost:8080/
+Erwartet:
+HTTP/1.1 200 OK
+4. Bonus im Browser demonstrieren
+Öffne:
+open http://localhost:8080/bonus.html
+Dort kannst du nacheinander zeigen:
+Python CGI
+Shell CGI
+Query Strings
+Cookie setzen
+Cookie wieder auslesen
+Session starten
+Session-Counter erhöhen
+Danach kannst du den automatischen Bonus-Demotest ausführen:
+sh tests/bonus_cgi_tests.sh
+Aktueller Stand:
+17/17 Bonus-Tests bestanden
+5. Upload und DELETE händisch zeigen
+Beende zuerst den Default-Server in Terminal 1 mit Ctrl+C.
+Starte anschließend die Upload-Konfiguration:
+./webserv tests/configs/evaluation_upload_delete.conf
+Sie läuft auf:
+http://localhost:18083/
+Datei vorbereiten
+Terminal 2:
+printf 'Hallo aus der webserv Evaluation\n' > /tmp/webserv-manual.txt
+Datei hochladen
+curl -i \
+  -X POST \
+  --data-binary @/tmp/webserv-manual.txt \
+  http://localhost:18083/upload/manual.txt
+Erwartet:
+HTTP/1.1 201 Created
+Prüfen, ob die Datei wirklich angekommen ist:
+ls -l uploads/manual.txt
+xxd uploads/manual.txt
+Datei löschen
+curl -i \
+  -X DELETE \
+  http://localhost:18083/upload/manual.txt
+Erwartet:
+HTTP/1.1 204 No Content
+Danach:
+test ! -e uploads/manual.txt && echo "Datei wurde erfolgreich gelöscht"
+Fehlende Datei löschen
+curl -i \
+  -X DELETE \
+  http://localhost:18083/upload/manual.txt
+Erwartet:
+HTTP/1.1 404 Not Found
+Zu großer Upload
+curl -i \
+  -X POST \
+  -H 'Content-Length: 1000001' \
+  http://localhost:18083/upload/too-large.txt
+Erwartet:
+HTTP/1.1 413 Payload Too Large
+6. CGI-Umgebung im Browser ansehen
+Server stoppen und CGI-Testkonfiguration starten:
+./webserv tests/configs/evaluation_cgi.conf
+Öffne anschließend:
+open 'http://localhost:18084/cgi-bin/evaluation_echo.py?source=browser&demo=yes'
+Im Browser erscheint JSON mit unter anderem:
+query_string
+request_method
+request_uri
+script_name
+script_filename
+path_info
+cwd
+POST an CGI:
+curl -i \
+  -X POST \
+  -H 'Content-Type: text/plain' \
+  --data-binary 'Hallo CGI' \
+  http://localhost:18084/cgi-bin/evaluation_echo.py
+Erwartet:
+Status 200
+"body": "Hallo CGI"
+"content_length": "9"
+7. Chunked CGI testen
+printf 'POST /cgi-bin/evaluation_echo.py HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n5\r\nhello\r\n0\r\n\r\n' \
+  | nc 127.0.0.1 18084
+Der Body sollte als hello beim CGI ankommen.
+Aktueller Fehler:
+Body wird bei einem vollständigen Paket dekodiert.
+CONTENT_LENGTH bleibt aber leer.
+Fragmentierte Chunked-Requests funktionieren noch nicht zuverlässig.
+8. CGI PATH_INFO zeigen
+Im Browser:
+open 'http://localhost:18084/cgi-bin/evaluation_echo.py/extra/path'
+Korrekt wäre:
+HTTP 200
+PATH_INFO=/extra/path
+Aktuell kommt wahrscheinlich:
+502 Bad Gateway
+Das ist einer der noch offenen Pflichtfehler.
+9. Blockierendes CGI demonstrieren
+Terminal 2:
+time curl -s http://localhost:18084/cgi-bin/evaluation_slow.py
+Während dieser Request läuft, sofort im Browser öffnen oder neu laden:
+http://localhost:18084/
+Korrektes Verhalten:
+Die Startseite reagiert praktisch sofort.
+Das CGI läuft parallel weiter.
+Aktueller Zustand:
+Die Startseite wartet ungefähr 1,8 Sekunden.
+Damit kannst du den noch vorhandenen Blocking-Fehler sichtbar zeigen.
+10. Autoindex händisch testen
+Server stoppen und starten:
+./webserv tests/configs/evaluation_static.conf
+Dann öffnen:
+open http://localhost:18082/gallery/
+Korrekt wäre eine Verzeichnisauflistung mit:
+listed.txt
+Aktuell liefert diese Route noch 404. Das ist ein offener Mandatory-Fehler.
+Autoindex ausgeschaltet:
+curl -i http://localhost:18082/private/
+Korrekt wäre:
+403 Forbidden
+Aktuell kommt noch 404.
+Redirect testen:
+curl -i http://localhost:18082/old
+Erwartet und aktuell bestanden:
+HTTP/1.1 302 Found
+Location: https://example.com/evaluation
+11. Mehrere Ports zeigen
+Server stoppen und starten:
+./webserv tests/configs/evaluation_multi_port.conf
+Dann beide Seiten öffnen:
+open http://localhost:18080/
+open http://localhost:18081/
+Beide Ports müssen unterschiedliche Seiten anzeigen. Dieser Test besteht aktuell.
+12. Virtual Hosts zeigen
+Server stoppen und starten:
+./webserv tests/configs/evaluation_virtual_hosts.conf
+Requests:
+curl -i -H 'Host: alpha.local' http://127.0.0.1:18088/
+curl -i -H 'Host: beta.local' http://127.0.0.1:18088/
+Korrekt wäre, dass beide Hostnamen unterschiedliche Inhalte erhalten.
+Aktuell liefern beide den ersten Serverblock. Dieser Test schlägt also noch fehl.
+13. Gesamttest vor der Evaluation
+Server vorher mit Ctrl+C stoppen. Danach:
+make test-eval
+Nur Mandatory:
+make test-core
+Nur Bonus:
+make test-bonus
+Kurzer Entwicklungsdurchlauf:
+make test-quick
+Die komplette Bedienungsanleitung liegt außerdem in [tests/README.md](/Users/puzzlesanalytik/42Heilbronn/webserve/tests/README.md).
+Für eine Evaluation würde ich diese Reihenfolge zeigen:
+make re
+Startseite im Browser
+404 und 405
+Upload und DELETE
+CGI GET und POST
+mehrere Ports
+make test-core
+erst bei komplett bestandenem Core die Bonus-Seite
+make test-bonus
+Momentan solltest du noch nicht behaupten, dass der Mandatory Part fertig ist. Die Seiten kannst du bereits gut demonstrieren, aber Autoindex, Virtual Hosts, Chunked CGI, PATH_INFO und das blockierende CGI werden bei genauer Prüfung auffallen.
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Stuff we need to do 
+
+
+Empfohlene Reihenfolge für die Reparatur
+CGI und sämtliche FDs in einen zentralen Poll-State-Machine-Loop integrieren.
+Blocking select() und waitpid(..., 0) entfernen.
+HTTP-Header und Content-Length strikt validieren.
+Chunked-Request-Completion reparieren.
+Half-Close-/POLLHUP-Reihenfolge korrigieren.
+Listener nach Interface und Port erstellen.
+Virtual-Host-Auswahl nach Host implementieren.
+Bind-Failure korrekt beenden.
+Autoindex und Directory-Routing reparieren.
+CGI-Skriptpfad, PATH_INFO und fehlende Skripte korrigieren.
+Nicht erlaubte Funktionen ersetzen.
+README finalisieren.
+make test-core wiederholen, bis 71/71 erreicht sind.
+Erst dann make test-bonus und Bonus in der Evaluation zeigen.
+Nicht vollständig automatisierbar sind der abschließende Test im Browser des Evaluators, Leak-Prüfung auf der tatsächlichen 42-Maschine und gegebenenfalls ein dort installierter externer Stress-Tester. Diese drei Prüfungen sollten nach 71/71 Mandatory zusätzlich erfolgen.

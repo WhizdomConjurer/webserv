@@ -8,6 +8,7 @@ COOKIE_JAR="/tmp/webserv_bonus_cookie_$$.txt"
 SESSION_JAR="/tmp/webserv_bonus_session_$$.txt"
 SERVER_LOG="/tmp/webserv_bonus_server_$$.log"
 SERVER_PID=""
+SESSION_FILE=""
 FAILURES=0
 
 cleanup()
@@ -17,6 +18,9 @@ cleanup()
 		wait "$SERVER_PID" 2>/dev/null
 	fi
 	rm -f "$COOKIE_JAR" "$SESSION_JAR" "$SERVER_LOG"
+	if [ -n "$SESSION_FILE" ]; then
+		rm -f "$SESSION_FILE"
+	fi
 }
 
 trap cleanup EXIT INT TERM
@@ -82,7 +86,8 @@ assert_contains "Shell CGI used shell script" "$shell_response" "Shell CGI works
 assert_contains "Shell CGI received query string" "$shell_response" "source=test"
 
 wrong_ext_response=$(curl -sS -i "$SERVER_URL/cgi-bin/not_cgi.txt")
-assert_not_contains "Wrong extension is not executed as CGI" "$wrong_ext_response" "HTTP/1.1 200 OK"
+assert_contains "Wrong extension is served as a static file" "$wrong_ext_response" "HTTP/1.1 200 OK"
+assert_contains "Wrong extension is not executed as CGI" "$wrong_ext_response" "not configured as CGI"
 
 set_cookie_response=$(curl -sS -i -c "$COOKIE_JAR" "$SERVER_URL/cgi-bin/bonus_set_cookie.py?value=from-test")
 assert_contains "Set cookie returns 200" "$set_cookie_response" "HTTP/1.1 200 OK"
@@ -96,6 +101,10 @@ session_first=$(curl -sS -i -c "$SESSION_JAR" -b "$SESSION_JAR" "$SERVER_URL/cgi
 assert_contains "Session first request returns 200" "$session_first" "HTTP/1.1 200 OK"
 assert_contains "Session sets cookie" "$session_first" "Set-Cookie: bonus_sid="
 assert_contains "Session counter starts at one" "$session_first" "1</strong> time"
+session_id=$(printf '%s' "$session_first" | sed -n 's/.*Set-Cookie: bonus_sid=\([^;]*\).*/\1/p' | head -n 1)
+if [ -n "$session_id" ]; then
+	SESSION_FILE="$ROOT_DIR/cgi-bin/bonus_sessions/session_$session_id"
+fi
 
 session_second=$(curl -sS -i -c "$SESSION_JAR" -b "$SESSION_JAR" "$SERVER_URL/cgi-bin/bonus_session.py")
 assert_contains "Session second request returns 200" "$session_second" "HTTP/1.1 200 OK"
