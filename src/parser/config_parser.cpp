@@ -7,7 +7,7 @@ ConfigParser::ConfigParser()
 }
 
 /* Zerstört den Parser; die gespeicherten Vektoren räumen ihre Daten selbst auf. */
-ConfigParser::~ConfigParser() { }
+ConfigParser::~ConfigParser() {}
 
 /* Gibt die geparsten Serverdaten auf stdout aus, um Config-Probleme manuell zu prüfen. */
 int ConfigParser::print()
@@ -15,14 +15,15 @@ int ConfigParser::print()
 	std::cout << "------------- Config -------------" << std::endl;
 	for (size_t i = 0; i < _servers.size(); i++)
 	{
-		std::cout << "Server #" << i + 1 << std::endl;
-		std::cout << "Server name: " << _servers[i].getServerName() << std::endl;
-		std::cout << "Host: " << _servers[i].getHost() << std::endl;
-		std::cout << "Root: " << _servers[i].getRoot() << std::endl;
-		std::cout << "Index: " << _servers[i].getIndex() << std::endl;
-		std::cout << "Port: " << _servers[i].getPort() << std::endl;
-		std::cout << "Max BSize: " << _servers[i].getClientMaxBodySize() << std::endl;
-		std::cout << "Error pages: " << _servers[i].getErrorPages().size() << std::endl;
+		std::cout << "Server #" 		<< i + 1 << std::endl;
+		std::cout << "Server name: " 	<< _servers[i].getServerName() << std::endl;
+		std::cout << "Host: " 			<< _servers[i].getHost() << std::endl;
+		std::cout << "Root: " 			<< _servers[i].getRoot() << std::endl;
+		std::cout << "Index: " 			<< _servers[i].getIndex() << std::endl;
+		std::cout << "Port: " 			<< _servers[i].getPort() << std::endl;
+		std::cout << "Max BSize: " 		<< _servers[i].getClientMaxBodySize() << std::endl;
+		std::cout << "Error pages: " 	<< _servers[i].getErrorPages().size() << std::endl;
+		
 		std::map<short, std::string>::const_iterator it = _servers[i].getErrorPages().begin();
 		while (it != _servers[i].getErrorPages().end())
 		{
@@ -61,8 +62,8 @@ int ConfigParser::print()
 /* Prüft und liest die Config-Datei, entfernt Kommentare und erzeugt daraus ServerConfig-Objekte. */
 int ConfigParser::createCluster(const std::string &config_file)
 {
-	std::string		content;
-	ConfigFile		file(config_file);
+	std::string content;
+	ConfigFile file(config_file);
 
 	if (file.getTypePath(file.getPath()) != 1)
 		throw ErrorException("File is invalid");
@@ -108,10 +109,10 @@ void ConfigParser::removeComments(std::string &content)
 /* Entfernt Whitespace am Anfang und Ende der gesamten Config. */
 void ConfigParser::removeWhiteSpace(std::string &content)
 {
-	size_t	i = 0;
+	size_t i = 0;
 
 	if (content.empty())
-		return ;
+		return;
 	while (content[i] && isspace(content[i]))
 		i++;
 	content = content.substr(i);
@@ -142,16 +143,16 @@ void ConfigParser::splitServers(std::string &content)
 }
 
 /* Sucht die öffnende Klammer des nächsten server{}-Blocks. */
-size_t ConfigParser::findStartServer (size_t start, std::string &content)
+size_t ConfigParser::findStartServer(size_t start, std::string &content)
 {
 	size_t i;
 
 	for (i = start; content[i]; i++)
 	{
 		if (content[i] == 's')
-			break ;
+			break;
 		if (!isspace(content[i]))
-			throw  ErrorException("Wrong character out of server scope{}");
+			throw ErrorException("Wrong character out of server scope{}");
 	}
 	if (!content[i])
 		return (start);
@@ -163,16 +164,15 @@ size_t ConfigParser::findStartServer (size_t start, std::string &content)
 	if (content[i] == '{')
 		return (i);
 	else
-		throw  ErrorException("Wrong character out of server scope{}");
-
+		throw ErrorException("Wrong character out of server scope{}");
 }
 
 /* Sucht die passende schließende Klammer zu einem server{}-Block. */
-size_t ConfigParser::findEndServer (size_t start, std::string &content)
+size_t ConfigParser::findEndServer(size_t start, std::string &content)
 {
-	size_t	i;
-	size_t	scope;
-	
+	size_t i;
+	size_t scope;
+
 	scope = 0;
 	for (i = start + 1; content[i]; i++)
 	{
@@ -188,31 +188,10 @@ size_t ConfigParser::findEndServer (size_t start, std::string &content)
 	return (start);
 }
 
-/* Zerlegt einen Direktiven-Text an allen Zeichen, die in sep stehen. */
-std::vector<std::string> splitParameters(const std::string &line, const std::string &sep)
-{
-	std::vector<std::string>	str;
-	std::string::size_type		start, end;
-
-	start = end = 0;
-	while (1)
-	{
-		end = line.find_first_of(sep, start);
-		if (end == std::string::npos)
-			break;
-		std::string tmp = line.substr(start, end - start);
-		str.push_back(tmp);
-		start = line.find_first_not_of(sep, end);
-		if (start == std::string::npos)
-			break;
-	}
-	return (str);
-}
-
 /* Vergleicht str2 mit str1 ab pos und akzeptiert nur vollständige Wörter. */
-int	ConfigParser::stringCompare(const std::string &str1, const std::string &str2, size_t pos)
+int ConfigParser::stringCompare(const std::string &str1, const std::string &str2, size_t pos)
 {
-	size_t	i;
+	size_t i;
 
 	i = 0;
 	while (pos < str1.length() && i < str2.length() && str1[pos] == str2[i])
@@ -235,16 +214,14 @@ void ConfigParser::checkServers()
 	{
 		for (it2 = it1 + 1; it2 != this->_servers.end(); it2++)
 		{
-			if (it1->getPort() == it2->getPort()
-				&& it1->getHostString() == it2->getHostString()
-				&& it1->getServerName() == it2->getServerName())
+			if (it1->getPort() == it2->getPort() && it1->getHostString() == it2->getHostString() && it1->getServerName() == it2->getServerName())
 				throw ErrorException("Failed server validation");
 		}
 	}
 }
 
 /* Gibt die geparsten ServerConfigs als Referenz zurück, ohne sie zu kopieren. */
-const std::vector<ServerConfig>	&ConfigParser::getServers() const
+const std::vector<ServerConfig> &ConfigParser::getServers() const
 {
 	return (this->_servers);
 }

@@ -1,6 +1,7 @@
 #include "server_config.hpp"
 #include "../parser/config_file.hpp"
 #include <cstdlib>
+#include <regex>
 
 /* Creates a ServerConfig with neutral default values before applying parser values. */
 ServerConfig::ServerConfig()
@@ -132,6 +133,16 @@ const std::string &ServerConfig::getIndex() const
 int ServerConfig::getPort() const
 {
 	return (_port);
+}
+
+/* Checks validity of port */
+int ServerConfig::checkPort(const std::vector<std::string> &parameters, size_t i) const
+{
+	if (std::regex_match(cleanToken(parameters[i]), std::regex(R"(^\d{1,5}$)")) &&
+		std::atoi(cleanToken(parameters[i]).c_str()) < 65536)
+		return (1);
+	else
+		return (0);
 }
 
 /* Returns the maximum allowed body size. */

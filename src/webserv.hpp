@@ -18,6 +18,7 @@
 # include <cerrno>
 # include <new>
 # include <stdint.h>
+# include <regex>
 
 /* STL Containers */
 # include <map>

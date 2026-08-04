@@ -1,7 +1,7 @@
 NAME := webserv
 
 CXX := c++
-CXXFLAGS := -Wall -Wextra -Werror -std=c++98
+CXXFLAGS := -Wall -Wextra -Werror -std=c++17
 CPPFLAGS := -Isrc -Isrc/cgi -Isrc/logger -Isrc/parser -Isrc/server
 WEBSERV_PYTHON ?= python3
 

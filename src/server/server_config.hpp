@@ -47,6 +47,8 @@ class ServerConfig
 		const std::vector<Location>			&getLocations() const;
 		std::vector<Location>				&getLocations();
 
+		int checkPort(const std::vector<std::string> &parameters, size_t i) const;
+
 		bool	checkLocaitons() const;
 		bool	isValidErrorPages() const;
 };
