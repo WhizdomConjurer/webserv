@@ -11,7 +11,7 @@ void sigpipeHandle(int sig)
 int main(int argc, char **argv)
 {
 	// Logger::setState(OFF);
-	if (argc == 1 || argc == 2)
+	if (argc <= 2)
 	{
 		try
 		{
