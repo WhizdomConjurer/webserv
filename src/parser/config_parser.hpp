@@ -3,6 +3,7 @@
 
 #include "../webserv.hpp"
 
+std::vector<std::string> splitParameters(const std::string &line, const std::string &sep);
 class ServerConfig;
 
 class ConfigParser {

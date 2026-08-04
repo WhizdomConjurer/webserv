@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by WhizdomConjurer and Tjkruger.*
+*This project has been created as part of the 42 curriculum by WhizdomConjurer, Tjkruger and mpoplow.*
 
 # webserv
 

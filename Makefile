@@ -11,6 +11,7 @@ SRC := \
 	src/cgi/cgi_handler.cpp \
 	src/logger/logger.cpp \
 	src/parser/config_file.cpp \
+	src/parser/config_parser_createserver.cpp \
 	src/parser/config_parser.cpp \
 	src/server/http_request.cpp \
 	src/server/location.cpp \
