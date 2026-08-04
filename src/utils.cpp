@@ -1,12 +1,12 @@
 #include "webserv.hpp"
 
-/* Löscht eine Ressource über die C++-Standardbibliothek. */
+/* Deletes a resource using the C++ standard library. */
 bool removeRegularFile(const std::string &path)
 {
 	return (std::remove(path.c_str()) == 0);
 }
 
-/* Wandelt einen Dezimalstring in int um und lehnt Nicht-Ziffern oder zu lange Werte ab. */
+/* Converts a decimal string to int and rejects non-digit characters or values that are too large. */
 int ft_stoi(std::string str)
 {
     std::stringstream ss(str);
@@ -22,7 +22,7 @@ int ft_stoi(std::string str)
     return (res);
 }
 
-/* Wandelt einen hexadezimalen Byte-String, z.B. "20", in eine Zahl um. */
+/* Converts a hexadecimal byte string, e.g. "20", into a number. */
 unsigned int fromHexToDec(const std::string& nb)
 {
 	unsigned int x;
@@ -32,7 +32,7 @@ unsigned int fromHexToDec(const std::string& nb)
 	return (x);
 }
 
-/* Liefert zum HTTP-Statuscode den offiziellen/üblichen Reason-Phrase-Text. */
+/* Returns the official/common reason phrase text for the HTTP status code. */
 std::string statusCodeString(short statusCode)
 {
     switch (statusCode)
@@ -144,7 +144,7 @@ std::string statusCodeString(short statusCode)
         }
 }
 
-/* Baut eine einfache HTML-Fehlerseite für den angegebenen HTTP-Statuscode. */
+/* Builds a simple HTML error page for the specified HTTP status code. */
 std::string getErrorPage(short statusCode)
 {
     return ("<html>\r\n<head><title>" + toString(statusCode) + " " +
@@ -152,7 +152,7 @@ std::string getErrorPage(short statusCode)
             "<center><h1>" + toString(statusCode) + " " + statusCodeString(statusCode) + "</h1></center>\r\n");
 }
 
-/* Baut eine einfache HTML-Verzeichnisliste und schreibt sie als Bytes in den Response-Body. */
+/* Builds a simple HTML directory listing and writes it as bytes to the response body. */
 int buildHtmlIndex(std::string &dir_name, std::vector<uint8_t> &body, size_t &body_len)
 {
     struct dirent   *entityStruct;

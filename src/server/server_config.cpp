@@ -2,7 +2,7 @@
 #include "../parser/config_file.hpp"
 #include <cstdlib>
 
-/* Erstellt eine ServerConfig mit neutralen Defaults, bevor Parserwerte gesetzt werden. */
+/* Creates a ServerConfig with neutral default values before applying parser values. */
 ServerConfig::ServerConfig()
 	: _server_name(""),
 	  _root(""),
@@ -15,10 +15,10 @@ ServerConfig::ServerConfig()
 {
 }
 
-/* Zerstört die Config; alle enthaltenen Daten werden von STL-Containern verwaltet. */
+/* Destroys the config; all contained data is managed by STL containers. */
 ServerConfig::~ServerConfig() {}
 
-/* Entfernt das abschließende Semikolon eines Config-Tokens. */
+/* Removes the trailing semicolon from a config token. */
 std::string ServerConfig::cleanToken(const std::string &value) const
 {
 	if (!value.empty() && value[value.length() - 1] == ';')
@@ -26,20 +26,20 @@ std::string ServerConfig::cleanToken(const std::string &value) const
 	return (value);
 }
 
-/* Speichert den TCP-Port, auf dem dieser Server später lauschen soll. */
+/* Stores the TCP port that this server will listen on. */
 void ServerConfig::setPort(const std::string &port)
 {
 	_port = std::atoi(cleanToken(port).c_str());
 }
 
-/* Speichert den Host und markiert, dass ein Host explizit konfiguriert wurde. */
+/* Stores the host and marks that a host has been explicitly configured. */
 void ServerConfig::setHost(const std::string &host)
 {
 	_host_string = cleanToken(host);
 	_host = _host_string.empty() ? 0 : 1;
 }
 
-/* Speichert den Document Root und sorgt dafür, dass er mit '/' endet. */
+/* Stores the document root and ensures that it ends with '/'. */
 void ServerConfig::setRoot(const std::string &root)
 {
 	_root = cleanToken(root);
@@ -47,32 +47,32 @@ void ServerConfig::setRoot(const std::string &root)
 		_root += "/";
 }
 
-/* Speichert die Index-Datei, die bei Verzeichnisanfragen ausgeliefert werden soll. */
+/* Stores the index file that should be served for directory requests. */
 void ServerConfig::setIndex(const std::string &index)
 {
 	_index = cleanToken(index);
 }
 
-/* Speichert den optionalen virtuellen Servernamen. */
+/* Stores the optional virtual server name. */
 void ServerConfig::setServerName(const std::string &name)
 {
 	_server_name = cleanToken(name);
 }
 
-/* Speichert die maximal erlaubte Body-Größe in Bytes. */
+/* Stores the maximum allowed body size in bytes. */
 void ServerConfig::setClientMaxBodySize(const std::string &size)
 {
 	_client_max_body_size = static_cast<size_t>(std::atol(cleanToken(size).c_str()));
 }
 
-/* Aktiviert oder deaktiviert Autoindex auf Serverebene. */
+/* Enables or disables autoindex at the server level. */
 void ServerConfig::setAutoindex(const std::string &value)
 {
 	const std::string clean = cleanToken(value);
 	_autoindex = (clean == "on" || clean == "true" || clean == "1");
 }
 
-/* Erstellt aus einem location{}-Block ein Location-Objekt und übernimmt Root/Index als Defaults. */
+/* Creates a Location object from a location{} block and uses Root/Index as defaults. */
 void ServerConfig::setLocation(const std::string &path, const std::vector<std::string> &tokens)
 {
 	Location location(path);
@@ -84,7 +84,7 @@ void ServerConfig::setLocation(const std::string &path, const std::vector<std::s
 	_locations.push_back(location);
 }
 
-/* Parst error_page-Direktiven der Form: error_page 404 /404.html;. */
+/* Parses error_page directives of the form: error_page 404 /404.html;. */
 void ServerConfig::setErrorPages(const std::vector<std::string> &tokens)
 {
 	if (tokens.size() < 2)
@@ -98,67 +98,67 @@ void ServerConfig::setErrorPages(const std::vector<std::string> &tokens)
 	}
 }
 
-/* Gibt den optionalen virtuellen Servernamen zurück. */
+/* Returns the optional virtual server name. */
 const std::string &ServerConfig::getServerName() const
 {
 	return (_server_name);
 }
 
-/* Gibt 0 zurück, wenn kein Host gesetzt wurde, sonst 1 für Parser-Duplikatprüfungen. */
+/* Returns 0 if no host was set, otherwise 1 for parser duplicate checks. */
 int ServerConfig::getHost() const
 {
 	return (_host);
 }
 
-/* Gibt den konfigurierten Host-String zurück. */
+/* Returns the configured host string. */
 const std::string &ServerConfig::getHostString() const
 {
 	return (_host_string);
 }
 
-/* Gibt den Document Root des Servers zurück. */
+/* Returns the server's document root. */
 const std::string &ServerConfig::getRoot() const
 {
 	return (_root);
 }
 
-/* Gibt die konfigurierte Index-Datei zurück. */
+/* Returns the configured index file. */
 const std::string &ServerConfig::getIndex() const
 {
 	return (_index);
 }
 
-/* Gibt den Port zurück, auf dem der Server lauschen soll. */
+/* Returns the port on which the server should listen. */
 int ServerConfig::getPort() const
 {
 	return (_port);
 }
 
-/* Gibt die maximal erlaubte Body-Größe zurück. */
+/* Returns the maximum allowed body size. */
 size_t ServerConfig::getClientMaxBodySize() const
 {
 	return (_client_max_body_size);
 }
 
-/* Gibt die Map aus Statuscode zu Error-Page-Pfad zurück. */
+/* Returns the map of status codes to error page paths. */
 const std::map<short, std::string> &ServerConfig::getErrorPages() const
 {
 	return (_error_pages);
 }
 
-/* Gibt alle konfigurierten Locations unveränderbar zurück. */
+/* Returns all configured locations as immutable. */
 const std::vector<Location> &ServerConfig::getLocations() const
 {
 	return (_locations);
 }
 
-/* Gibt alle Locations veränderbar zurück, z.B. für CGI-Testaufbau. */
+/* Returns all locations as mutable, e.g. for CGI test setup. */
 std::vector<Location> &ServerConfig::getLocations()
 {
 	return (_locations);
 }
 
-/* Prüft, ob zwei location{}-Blöcke denselben Pfad benutzen. */
+/* Checks whether two location{} blocks use the same path. */
 bool ServerConfig::checkLocaitons() const
 {
 	for (size_t i = 0; i < _locations.size(); ++i)
@@ -172,7 +172,7 @@ bool ServerConfig::checkLocaitons() const
 	return (false);
 }
 
-/* Prüft, ob Error-Page-Statuscodes im gültigen HTTP-Fehlerbereich liegen. */
+/* Checks whether error page status codes are within the valid HTTP error range. */
 bool ServerConfig::isValidErrorPages() const
 {
 	for (std::map<short, std::string>::const_iterator it = _error_pages.begin();

@@ -219,17 +219,17 @@ void ServerManager::acceptNewClients(int listen_fd)
 	}
 }
 
-/* Erstellt einen leeren Manager; die eigentlichen ServerConfig-Objekte kommen später über setupServers(). */
+/* Creates an empty manager; the actual ServerConfig objects are added later via setupServers(). */
 ServerManager::ServerManager()
 {
 }
 
-/* Räumt den Manager auf; offene Sockets werden im Loop selbst geschlossen. */
+/* Cleans up the manager; open sockets are closed in the loop itself. */
 ServerManager::~ServerManager()
 {
 }
 
-/* Speichert alle vom Parser erzeugten Serverblöcke, damit der Manager daraus Listener bauen kann. */
+/* Stores all server blocks created by the parser so the manager can build listeners from them. */
 void ServerManager::setupServers(const std::vector<ServerConfig> &servers)
 {
 	_servers = servers;
@@ -237,12 +237,9 @@ void ServerManager::setupServers(const std::vector<ServerConfig> &servers)
 		static_cast<unsigned long>(_servers.size()));
 }
 
-/*
- * Startet den HTTP-Loop.
- *
- * setupListeners() registriert alle konfigurierten Ports. eventLoop() überwacht
- * anschließend Listener, Clients und CGI-Pipes gemeinsam mit genau einem poll().
- */
+/* Starts the HTTP loop.
+ * setupListeners() registers all configured ports. eventLoop() then monitors
+ * listeners, clients, and CGI pipes together using exactly one poll(). */
 void ServerManager::runServers()
 {
 	if (_servers.empty())
@@ -257,7 +254,7 @@ void ServerManager::runServers()
 	eventLoop();
 }
 
-/* Erstellt einen TCP-Socket, bindet ihn an den konfigurierten Port und schaltet listen() ein. */
+/* Creates a TCP socket, binds it to the configured port, and enables listen(). */
 int ServerManager::createListenSocket(const std::string &host, int port) const
 {
 	struct addrinfo hints;
@@ -305,7 +302,7 @@ int ServerManager::createListenSocket(const std::string &host, int port) const
 	return (fd);
 }
 
-/* Wählt innerhalb eines gemeinsamen Interface:Port-Listeners den passenden Servernamen. */
+/* Selects the matching server name within a shared interface:port listener. */
 const ServerConfig *ServerManager::selectServer(int listener_fd,
 	const std::string &host_header) const
 {
@@ -338,7 +335,7 @@ size_t ServerManager::extractContentLength(const std::string &headers) const
 	return (static_cast<size_t>(std::atol(content_length.c_str())));
 }
 
-/* Parst Content-Length strikt dezimal und schützt size_t vor Überlauf. */
+/* Parses Content-Length strictly as decimal and protects size_t from overflow. */
 bool ServerManager::parseContentLength(const std::string &headers, size_t &length) const
 {
 	const std::string value = getHeaderValue(headers, "Content-Length");
@@ -471,7 +468,8 @@ void ServerManager::closeClient(int fd)
 	::close(fd);
 	_clients.erase(fd);
 }
-/* Sucht einen Header case-insensitive in einem rohen Headerblock. */
+
+/* Searches for a header case-insensitively in a raw header block. */
 std::string ServerManager::getHeaderValue(const std::string &headers,
 	const std::string &name) const
 {
@@ -505,7 +503,7 @@ std::string ServerManager::getHeaderValue(const std::string &headers,
 	return ("");
 }
 
-/* Prüft, ob Transfer-Encoding: chunked gesetzt ist. */
+/* Checks whether Transfer-Encoding: chunked is set. */
 bool ServerManager::hasChunkedBody(const std::string &headers) const
 {
 	std::string transfer_encoding = getHeaderValue(headers, "Transfer-Encoding");
@@ -515,7 +513,7 @@ bool ServerManager::hasChunkedBody(const std::string &headers) const
 	return (transfer_encoding.find("chunked") != std::string::npos);
 }
 
-/* Erkennt das Ende eines chunked Bodys anhand des finalen 0-Chunks. */
+/* Detects the end of a chunked body based on the final 0-chunk. */
 bool ServerManager::isChunkedBodyComplete(const std::string &raw_request) const
 {
 	const size_t header_end = raw_request.find("\r\n\r\n");
@@ -528,7 +526,7 @@ bool ServerManager::isChunkedBodyComplete(const std::string &raw_request) const
 		|| body.find("\r\n0\r\n") == body.length() - 5);
 }
 
-/* Dekodiert einen Transfer-Encoding: chunked Body in den rohen CGI-Body. */
+/* Decodes a Transfer-Encoding: chunked body into the raw CGI body. */
 std::string ServerManager::decodeChunkedBody(const std::string &body) const
 {
 	std::string decoded;
@@ -554,12 +552,12 @@ std::string ServerManager::decodeChunkedBody(const std::string &body) const
 	return (decoded);
 }
 
-/* Zerlegt den rohen HTTP-Text in Methode, Pfad, Query, Header und Body. */
+/* Splits the raw HTTP text into method, path, query, headers, and body. */
 HttpRequest ServerManager::parseRequest(const std::string &raw_request) const
 {
 	HttpRequest request;
 
-	/* No CRLF at all means we never had a complete, well-formed request line. */
+/* No CRLF at all means we never had a complete, well-formed request line. */
 	const size_t line_end = raw_request.find("\r\n");
 	if (line_end == std::string::npos)
 	{
@@ -857,7 +855,7 @@ std::string ServerManager::getConfiguredErrorPage(short status, const ServerConf
 	return (getErrorPage(status));
 }
 
-/* Startet CGI und übergibt seine Pipes an die zentrale poll()-State-Machine. */
+/* Starts CGI and passes its pipes to the central poll()-based state machine. */
 void ServerManager::startCgiRequest(ClientConnection &client, HttpRequest &request)
 {
 	const ServerConfig &server = *client.server;
@@ -946,7 +944,7 @@ void ServerManager::startCgiRequest(ClientConnection &client, HttpRequest &reque
 	}
 }
 
-/* Schreibt den Request-Body nur dann, wenn poll() die CGI-stdin-Pipe freigibt. */
+/* Writes the request body only when poll() releases the CGI stdin pipe. */
 void ServerManager::handleCgiInputWritable(ClientConnection &client)
 {
 	const ssize_t n = ::write(client.cgi_stdin_fd,
@@ -966,7 +964,7 @@ void ServerManager::handleCgiInputWritable(ClientConnection &client)
 	}
 }
 
-/* Liest CGI-Ausgabe non-blocking; EOF schließt nur diese Pipe, nicht den Client. */
+/* Reads CGI output non-blocking; EOF closes only this pipe, not the client. */
 void ServerManager::handleCgiOutputReadable(ClientConnection &client)
 {
 	char buffer[4096];
@@ -986,7 +984,7 @@ void ServerManager::handleCgiOutputReadable(ClientConnection &client)
 	failCgiRequest(client, 502);
 }
 
-/* Prüft Prozessende und Timeout ohne auf einen laufenden CGI-Prozess zu warten. */
+/* Checks process termination and timeout without waiting for a running CGI process. */
 void ServerManager::updateCgiProcesses()
 {
 	const time_t now = std::time(NULL);
@@ -1022,7 +1020,7 @@ void ServerManager::updateCgiProcesses()
 	}
 }
 
-/* Erntet beendete CGI-Kinder ausschließlich mit non-blocking waitpid(). */
+/* Reaps terminated CGI children exclusively with non-blocking waitpid(). */
 void ServerManager::reapCgiChildren()
 {
 	for (std::vector<pid_t>::iterator it = _terminated_cgi_pids.begin();
@@ -1037,7 +1035,7 @@ void ServerManager::reapCgiChildren()
 	}
 }
 
-/* Baut erst nach Prozessende und vollständig gelesener stdout-Pipe die HTTP-Antwort. */
+/* Builds the HTTP response only after process termination and the stdout pipe has been fully read. */
 void ServerManager::finishCgiRequest(ClientConnection &client)
 {
 	if (!WIFEXITED(client.cgi_exit_status) || WEXITSTATUS(client.cgi_exit_status) != 0)
@@ -1052,7 +1050,7 @@ void ServerManager::finishCgiRequest(ClientConnection &client)
 	client.last_activity = std::time(NULL);
 }
 
-/* Beendet eine fehlerhafte oder abgelaufene CGI-Anfrage und liefert 502/504. */
+/* Terminates a failed or timed-out CGI request and returns 502/504. */
 void ServerManager::failCgiRequest(ClientConnection &client, short status)
 {
 	cleanupCgi(client, true);
@@ -1062,7 +1060,7 @@ void ServerManager::failCgiRequest(ClientConnection &client, short status)
 	client.last_activity = std::time(NULL);
 }
 
-/* Schließt alle CGI-FDs; bei Clientabbruch/Timeout wird auch das Kind beendet und geerntet. */
+/* Closes all CGI FDs; on client disconnect/timeout, the child is also terminated and reaped. */
 void ServerManager::cleanupCgi(ClientConnection &client, bool terminate_child)
 {
 	if (client.cgi_stdin_fd >= 0)
@@ -1087,7 +1085,7 @@ void ServerManager::cleanupCgi(ClientConnection &client, bool terminate_child)
 	client.cgi_exit_status = 0;
 }
 
-/* Wandelt CGI-Ausgabe mit Header/Body-Trennung in eine vollständige HTTP/1.1-Antwort um. */
+/* Converts CGI output with header/body separation into a complete HTTP/1.1 response. */
 std::string ServerManager::normalizeCgiOutput(const std::string &cgi_output) const
 {
 	std::string normalized = cgi_output;
@@ -1140,7 +1138,7 @@ std::string ServerManager::normalizeCgiOutput(const std::string &cgi_output) con
 	return (response.str());
 }
 
-/* Baut eine normale HTTP-Antwort inklusive Statuszeile, Content-Type, Content-Length und Body. */
+/* Builds a normal HTTP response including status line, Content-Type, Content-Length, and body. */
 std::string ServerManager::buildHttpResponse(short status, const std::string &content_type,
 	const std::string &body) const
 {
@@ -1153,7 +1151,7 @@ std::string ServerManager::buildHttpResponse(short status, const std::string &co
 	return (response.str());
 }
 
-/* Baut eine einfache 302-Weiterleitung mit Location-Header. */
+/* Builds a simple 302 redirect with a Location header. */
 std::string ServerManager::buildRedirectResponse(const std::string &location) const
 {
 	std::stringstream response;
@@ -1164,7 +1162,7 @@ std::string ServerManager::buildRedirectResponse(const std::string &location) co
 	return (response.str());
 }
 
-/* Prüft, ob die HTTP-Header vollständig sind, und gibt den Header-Endmarker zurück. */
+/* Checks whether the HTTP headers are complete and returns the header end marker. */
 std::string ServerManager::findHeaderEnd(const std::string &raw_request) const
 {
 	const size_t pos = raw_request.find("\r\n\r\n");
@@ -1173,7 +1171,7 @@ std::string ServerManager::findHeaderEnd(const std::string &raw_request) const
 	return (raw_request.substr(pos, 4));
 }
 
-/* Dekodiert einfache Prozentkodierung in URLs, z.B. %20 zu Leerzeichen. */
+/* Decodes simple percent-encoding in URLs, e.g. %20 to spaces. */
 std::string ServerManager::urlDecode(const std::string &value) const
 {
 	std::string decoded = value;
@@ -1188,7 +1186,7 @@ std::string ServerManager::urlDecode(const std::string &value) const
 	return (decoded);
 }
 
-/* Entfernt die Query aus einem Request-Target und gibt nur den URL-Pfad zurück. */
+/* Removes the query from a request target and returns only the URL path. */
 std::string ServerManager::getPathWithoutQuery(const std::string &target) const
 {
 	const size_t query = target.find('?');
@@ -1197,7 +1195,7 @@ std::string ServerManager::getPathWithoutQuery(const std::string &target) const
 	return (urlDecode(target.substr(0, query)));
 }
 
-/* Gibt den Query-String ohne führendes '?' zurück, oder einen leeren String. */
+/* Returns the query string without the leading '?', or an empty string. */
 std::string ServerManager::getQueryFromTarget(const std::string &target) const
 {
 	const size_t query = target.find('?');
@@ -1206,7 +1204,7 @@ std::string ServerManager::getQueryFromTarget(const std::string &target) const
 	return (target.substr(query + 1));
 }
 
-/* Übersetzt einen URL-Pfad in einen Dateipfad unterhalb des konfigurierten Server-Roots. */
+/* Translates a URL path into a file path below the configured server root. */
 std::string ServerManager::resolveStaticPath(const Location &location,
 	const std::string &url_path) const
 {
@@ -1222,13 +1220,13 @@ std::string ServerManager::resolveStaticPath(const Location &location,
 	return (location.getRootLocation() + relative_path);
 }
 
-/* Prüft, ob der URL-Pfad zu einer CGI-Location passt. */
+/* Checks whether the URL path matches a CGI location. */
 bool ServerManager::isCgiRequest(const ServerConfig &server, const std::string &url_path) const
 {
 	return (findCgiLocation(server, url_path) != NULL);
 }
 
-/* Findet die erste Location, deren Pfad und CGI-Endung zur Anfrage passen. */
+/* Finds the first location whose path and CGI extension match the request. */
 const Location *ServerManager::findCgiLocation(const ServerConfig &server,
 	const std::string &url_path) const
 {
@@ -1265,13 +1263,13 @@ const Location *ServerManager::findMatchingLocation(const ServerConfig &server,
 		const std::string &loc_path = it->getPath();
 
 		if (url_path.compare(0, loc_path.length(), loc_path) != 0)
-			continue; // request path doesn't start with this location's path at all
+			continue;
 
 		const bool exact = (url_path.length() == loc_path.length());
 		const bool boundary = !exact && (loc_path[loc_path.length() - 1] == '/' || url_path[loc_path.length()] == '/');
 		
 		if (!exact && !boundary)
-			continue; // e.g. "/cgi" matching "/cgi-bin/..." -- reject
+			continue;
 
 		if (loc_path.length() > best_length)
 		{

@@ -1,6 +1,6 @@
 #include "cgi_handler.hpp"
 
-/* Initialisiert einen leeren CGI-Handler mit geschlossenen Pipes und ohne Kindprozess. */
+/* Initializes an empty CGI handler with closed pipes and no child process. */
 CgiHandler::CgiHandler()
 	: _ch_env(NULL),
 	  _argv(NULL),
@@ -14,7 +14,7 @@ CgiHandler::CgiHandler()
 	pipe_out[1] = -1;
 }
 
-/* Initialisiert den CGI-Handler direkt mit dem Skriptpfad, der später ausgeführt wird. */
+/* Initializes the CGI handler directly with the script path to be executed later. */
 CgiHandler::CgiHandler(const std::string &path)
 	: _ch_env(NULL),
 	  _argv(NULL),
@@ -28,13 +28,13 @@ CgiHandler::CgiHandler(const std::string &path)
 	pipe_out[1] = -1;
 }
 
-/* Gibt argv/env-Speicher frei und schließt alle Pipes, die noch offen sind. */
+/* Frees argv/env storage and closes all pipes that are still open. */
 CgiHandler::~CgiHandler()
 {
 	clear();
 }
 
-/* Kopiert nur Wertdaten; argv/env werden pro Anfrage neu gebaut, um Double-Free zu vermeiden. */
+/* Copies only value data; argv/env are rebuilt per request to avoid double-free. */
 CgiHandler::CgiHandler(const CgiHandler &other)
 	: _env(other._env),
 	  _ch_env(NULL),
@@ -49,7 +49,7 @@ CgiHandler::CgiHandler(const CgiHandler &other)
 	pipe_out[1] = -1;
 }
 
-/* Weist sichere Wertdaten zu und räumt vorher eigene argv/env-Ressourcen auf. */
+/* Assigns safe value data and cleans up owned argv/env resources beforehand. */
 CgiHandler &CgiHandler::operator=(const CgiHandler &rhs)
 {
 	if (this != &rhs)
@@ -63,37 +63,37 @@ CgiHandler &CgiHandler::operator=(const CgiHandler &rhs)
 	return (*this);
 }
 
-/* Speichert die PID des CGI-Kindprozesses, damit der Aufrufer später waitpid() nutzen kann. */
+/* Stores the CGI child process PID so the caller can use waitpid() later. */
 void CgiHandler::setCgiPid(pid_t cgi_pid)
 {
 	_cgi_pid = cgi_pid;
 }
 
-/* Speichert den absoluten oder relativen Skriptpfad, der an CGI übergeben wird. */
+/* Stores the absolute or relative script path passed to CGI. */
 void CgiHandler::setCgiPath(const std::string &cgi_path)
 {
 	_cgi_path = cgi_path;
 }
 
-/* Gibt die CGI-Umgebung als Map zurück, bevor sie in char** für execve() umgewandelt wird. */
+/* Returns the CGI environment as a map before it is converted to char** for execve(). */
 const std::map<std::string, std::string> &CgiHandler::getEnv() const
 {
 	return (_env);
 }
 
-/* Gibt die aktuelle CGI-Kindprozess-PID zurück, oder -1 wenn keiner aktiv ist. */
+/* Returns the current CGI child process PID, or -1 if none is active. */
 pid_t CgiHandler::getCgiPid() const
 {
 	return (_cgi_pid);
 }
 
-/* Gibt den Skriptpfad dieser CGI-Anfrage zurück. */
+/* Returns the script path of this CGI request. */
 const std::string &CgiHandler::getCgiPath() const
 {
 	return (_cgi_path);
 }
 
-/* Erstellt eine C++-verwaltete, nullterminierte Kopie für execve()-Arrays. */
+/* Creates a C++-managed, null-terminated copy for execve() arrays. */
 char *CgiHandler::duplicateString(const std::string &value) const
 {
 	char *copy = new char[value.length() + 1];
@@ -101,7 +101,7 @@ char *CgiHandler::duplicateString(const std::string &value) const
 	return (copy);
 }
 
-/* Wandelt die Environment-Map in ein NULL-terminiertes char** um, wie execve() es erwartet. */
+/* Converts the environment map into a NULL-terminated char** as expected by execve(). */
 void CgiHandler::buildEnvArray()
 {
 	freeEnvArray();
@@ -119,7 +119,7 @@ void CgiHandler::buildEnvArray()
 	}
 }
 
-/* Baut das NULL-terminierte argv-Array: argv[0] ist Interpreter, argv[1] das Skript. */
+/* Builds the NULL-terminated argv array: argv[0] is the interpreter, argv[1] is the script. */
 void CgiHandler::buildArgvArray(const std::string &exec_path)
 {
 	freeArgvArray();
@@ -131,7 +131,7 @@ void CgiHandler::buildArgvArray(const std::string &exec_path)
 	_argv[1] = duplicateString(_cgi_path);
 }
 
-/* Gibt das aktuell für execve() gebaute Environment-Array frei. */
+/* Frees the environment array currently built for execve(). */
 void CgiHandler::freeEnvArray()
 {
 	if (!_ch_env)
@@ -142,7 +142,7 @@ void CgiHandler::freeEnvArray()
 	_ch_env = NULL;
 }
 
-/* Gibt das aktuell für execve() gebaute argv-Array frei. */
+/* Frees the argv array currently built for execve(). */
 void CgiHandler::freeArgvArray()
 {
 	if (!_argv)
@@ -153,7 +153,7 @@ void CgiHandler::freeArgvArray()
 	_argv = NULL;
 }
 
-/* Schließt einen File Descriptor, falls er offen ist, und markiert ihn danach mit -1. */
+/* Closes a file descriptor if it is open and marks it as -1 afterwards. */
 void CgiHandler::closeFd(int &fd)
 {
 	if (fd >= 0)
@@ -161,7 +161,7 @@ void CgiHandler::closeFd(int &fd)
 	fd = -1;
 }
 
-/* Überträgt HTTP-Header in CGI-Variablen, z.B. user-agent -> HTTP_USER_AGENT. */
+/* Converts HTTP headers into CGI variables, e.g. user-agent -> HTTP_USER_AGENT. */
 void CgiHandler::addRequestHeaders(HttpRequest &req)
 {
 	const std::map<std::string, std::string> headers = req.getHeaders();
@@ -180,7 +180,7 @@ void CgiHandler::addRequestHeaders(HttpRequest &req)
 	}
 }
 
-/* Baut eine einfache CGI-Umgebung aus Requestdaten und Location-CGI-Einstellungen. */
+/* Builds a simple CGI environment from request data and location CGI settings. */
 void CgiHandler::initEnvCgi(HttpRequest &req, const std::vector<Location>::iterator it_loc)
 {
 	if (_cgi_path.empty())
@@ -211,7 +211,7 @@ void CgiHandler::initEnvCgi(HttpRequest &req, const std::vector<Location>::itera
 	buildArgvArray(cgi_exec);
 }
 
-/* Baut die CGI/1.1-Umgebung für Endungs-Mapping, z.B. .py -> Python-Interpreter. */
+/* Builds the CGI/1.1 environment for extension mapping, e.g. .py -> Python interpreter. */
 void CgiHandler::initEnv(HttpRequest &req, const std::vector<Location>::iterator it_loc)
 {
 	std::map<std::string, std::string>::iterator it_path = it_loc->_ext_path.end();
@@ -272,13 +272,11 @@ void CgiHandler::initEnv(HttpRequest &req, const std::vector<Location>::iterator
 	buildArgvArray(it_path->second);
 }
 
-/*
- * Startet das CGI-Programm:
- * - pipe_in verbindet Server -> CGI-stdin.
- * - pipe_out verbindet CGI-stdout -> Server.
- * - fork() erzeugt den Kindprozess.
- * - Im Kindprozess ersetzt execve() das Kind durch den Interpreter/Skript-Aufruf.
- */
+/* Starts the CGI program:
+ * pipe_in connects server -> CGI stdin.
+ * pipe_out connects CGI stdout -> server.
+ * fork() creates the child process.
+ * In the child process, execve() replaces the child with the interpreter/script invocation. */
 void CgiHandler::execute(short &error_code)
 {
 	if (!_argv || !_argv[0] || !_argv[1])
@@ -338,7 +336,7 @@ void CgiHandler::execute(short &error_code)
 	closeFd(pipe_out[1]);
 }
 
-/* Sucht delim in path und gibt die Position zurück, oder -1 wenn nichts gefunden wurde. */
+/* Searches for delim in path and returns the position, or -1 if not found. */
 int CgiHandler::findStart(const std::string &path, const std::string &delim) const
 {
 	const size_t pos = path.find(delim);
@@ -347,7 +345,7 @@ int CgiHandler::findStart(const std::string &path, const std::string &delim) con
 	return (static_cast<int>(pos));
 }
 
-/* Dekodiert Prozentkodierung in URL/Query-Strings direkt im übergebenen String. */
+/* Decodes percent-encoding in URL/query strings directly in the provided string. */
 std::string CgiHandler::decode(std::string &path) const
 {
 	size_t token = path.find('%');
@@ -362,7 +360,7 @@ std::string CgiHandler::decode(std::string &path) const
 	return (path);
 }
 
-/* Extrahiert PATH_INFO: alles nach der CGI-Endung, aber ohne Query-String. */
+/* Extracts PATH_INFO: everything after the CGI extension, excluding the query string. */
 std::string CgiHandler::getPathInfo(const std::string &path,
 	const std::vector<std::string> &extensions) const
 {
@@ -392,7 +390,7 @@ std::string CgiHandler::getPathInfo(const std::string &path,
 	return (path_info.substr(0, query));
 }
 
-/* Setzt den Handler zurück und gibt alle eigenen Prozess-/Pipe-/Environment-Ressourcen frei. */
+/* Resets the handler and frees all owned process/pipe/environment resources. */
 void CgiHandler::clear()
 {
 	freeEnvArray();

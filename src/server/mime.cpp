@@ -1,6 +1,6 @@
 #include "mime.hpp"
 
-/* Bestimmt anhand der Dateiendung den Content-Type für statische Antworten. */
+/* Determines the Content-Type for static responses based on the file extension. */
 std::string Mime::getType(const std::string &path)
 {
 	const size_t dot = path.rfind('.');
