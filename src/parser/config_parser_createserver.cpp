@@ -47,9 +47,10 @@ void ConfigParser::createServer(std::string &config, ServerConfig &server)
 	{
 		if (parameters[i] == "listen" && isValidDirective(i, parameters) && flag_loc)
 		{
+			i++;
 			if (server.getPort())
-				i++;
-			else if (i += server.checkPort(parameters, i + 1))
+				continue;
+			else if (server.checkPort(parameters, i))
 				server.setPort(parameters[i]);
 		}
 		else if (parameters[i] == "location" && isValidDirective(i, parameters))
